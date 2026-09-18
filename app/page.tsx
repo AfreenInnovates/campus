@@ -335,10 +335,9 @@ export default function Home() {
             </p>
           </div>
 
-          <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Reveal><ul className="stagger mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {OBJECTIVES.map((objective, index) => (
-              <Reveal key={objective.label} delay={index * 60} className="contents">
-              <li className="flex items-center gap-3 border-[3px] border-ink bg-paper-light px-4 py-3.5 shadow-[5px_5px_0_var(--ink)] transition duration-300 hover:-translate-y-1 hover:shadow-[8px_8px_0_var(--ink)]">
+              <li key={objective.label} className="flex items-center gap-3 border-[3px] border-ink bg-paper-light px-4 py-3.5 shadow-[5px_5px_0_var(--ink)] transition duration-300 hover:-translate-y-1 hover:shadow-[8px_8px_0_var(--ink)]">
                 <span className={`grid h-11 w-11 shrink-0 place-items-center border-[3px] border-ink ${objective.color}`}>
                   <HugeiconsIcon icon={objective.icon} size={22} strokeWidth={2.3} />
                 </span>
@@ -350,9 +349,8 @@ export default function Home() {
                   <span className="block text-[11px] text-ink-soft">{objective.place}</span>
                 </span>
               </li>
-              </Reveal>
             ))}
-          </ul>
+          </ul></Reveal>
         </section>
 
         {/* --------------- AWS --------------- */}
