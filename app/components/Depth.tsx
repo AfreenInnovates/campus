@@ -89,6 +89,8 @@ export function Tilt({
     let x = 0;
     let y = 0;
     let lift = 0;
+    /** Measured once when the pointer arrives, never during the move itself. */
+    let box: DOMRect | null = null;
 
     const apply = () => {
       frame = 0;
@@ -97,8 +99,15 @@ export function Tilt({
       node.style.setProperty("--tilt-lift", lift.toFixed(3));
     };
 
+    // Reading getBoundingClientRect on every pointermove forces a synchronous layout on
+    // each frame, which is the classic way a tilt effect turns janky. The card cannot move
+    // or resize while the cursor is inside it, so one measurement on enter is enough.
+    const onEnter = () => {
+      box = node.getBoundingClientRect();
+    };
+
     const onMove = (event: PointerEvent) => {
-      const box = node.getBoundingClientRect();
+      if (!box) box = node.getBoundingClientRect();
       x = ((event.clientX - box.left) / box.width) * 2 - 1;
       y = ((event.clientY - box.top) / box.height) * 2 - 1;
       lift = 1;
@@ -106,17 +115,31 @@ export function Tilt({
     };
 
     const onLeave = () => {
+      box = null;
       x = 0;
       y = 0;
       lift = 0;
       frame ||= requestAnimationFrame(apply);
     };
 
+    const invalidate = () => {
+      box = null;
+    };
+
+    node.addEventListener("pointerenter", onEnter);
     node.addEventListener("pointermove", onMove, { passive: true });
     node.addEventListener("pointerleave", onLeave);
+    window.addEventListener("resize", invalidate, { passive: true });
+    // the page scrolls inside <main>, so the card's viewport position changes there
+    const scroller = node.closest("main");
+    scroller?.addEventListener("scroll", invalidate, { passive: true });
+
     return () => {
+      node.removeEventListener("pointerenter", onEnter);
       node.removeEventListener("pointermove", onMove);
       node.removeEventListener("pointerleave", onLeave);
+      window.removeEventListener("resize", invalidate);
+      scroller?.removeEventListener("scroll", invalidate);
       if (frame) cancelAnimationFrame(frame);
     };
   }, []);
@@ -151,16 +174,27 @@ export function Reveal({
       return;
     }
 
+    const show = () => {
+      node.classList.add("is-visible");
+      observer.disconnect(); // one-shot: nothing re-hides on the way back up
+      window.clearTimeout(safety);
+    };
+
     const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) return;
-        node.classList.add("is-visible");
-        observer.disconnect(); // one-shot: nothing re-hides on the way back up
-      },
+      ([entry]) => entry.isIntersecting && show(),
       { rootMargin: "0px 0px -12% 0px", threshold: 0.1 },
     );
     observer.observe(node);
-    return () => observer.disconnect();
+
+    // Fail open. The reveal starts at opacity 0, so anything that stops the observer
+    // delivering — a background tab, a throttled frame loop, an unsupported root — would
+    // otherwise leave real content permanently invisible. Late is survivable; missing is not.
+    const safety = window.setTimeout(show, 2500);
+
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(safety);
+    };
   }, []);
 
   return (
