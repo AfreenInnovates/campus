@@ -1,0 +1,501 @@
+@import "tailwindcss";
+
+/* CampusEvac neo-brutalism: warm paper, plum ink, hard shadows, sunset accents. */
+:root {
+  --ink: #1d1626;
+  --ink-soft: #5c5066;
+  --paper: #f8f2ea;
+  --paper-deep: #eee3d5;
+  --paper-light: #fffaf3;
+  --sun: #ffc44d;
+  --sun-hover: #ffd57a;
+  --coral: #ff6a3d;
+  --violet: #7b5cff;
+  --mint: #2fd18f;
+  --danger: #ef3b4b;
+  --night: #16111e;
+  --background: var(--paper);
+  --foreground: var(--ink);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-paper: var(--paper);
+  --color-paper-deep: var(--paper-deep);
+  --color-paper-light: var(--paper-light);
+  --color-sun: var(--sun);
+  --color-coral: var(--coral);
+  --color-violet: var(--violet);
+  --color-mint: var(--mint);
+  --color-danger: var(--danger);
+  --color-night: var(--night);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: var(--sun);
+  color: var(--ink);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button,
+a,
+select,
+input {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.brutal-grid {
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(rgba(29, 22, 38, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(29, 22, 38, 0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.brutal-panel {
+  border: 2px solid var(--ink);
+  background: var(--paper-light);
+  box-shadow: 7px 7px 0 var(--ink);
+}
+
+.brutal-panel-dark {
+  border: 2px solid var(--ink);
+  background: var(--night);
+  color: var(--paper);
+  box-shadow: 7px 7px 0 var(--coral);
+}
+
+.brutal-tag {
+  display: inline-block;
+  border: 2px solid var(--ink);
+  padding: 0.2rem 0.55rem;
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.brutal-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--ink);
+  background: var(--sun);
+  color: var(--ink);
+  box-shadow: 4px 4px 0 var(--ink);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+
+.brutal-button:hover {
+  background: var(--sun-hover);
+  transform: translate(-1px, -1px);
+  box-shadow: 6px 6px 0 var(--ink);
+}
+
+.brutal-button:active {
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0 var(--ink);
+}
+
+.brutal-button-dark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--paper);
+  background: transparent;
+  color: var(--paper);
+  box-shadow: 4px 4px 0 var(--coral);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+
+.brutal-button-dark:hover {
+  background: rgba(248, 242, 234, 0.12);
+  transform: translate(-1px, -1px);
+  box-shadow: 6px 6px 0 var(--coral);
+}
+
+.brutal-button-dark:active {
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0 var(--coral);
+}
+
+.brutal-input {
+  border: 2px solid var(--ink);
+  background: var(--paper-light);
+  color: var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.brutal-input:focus {
+  outline: 3px solid var(--violet);
+  outline-offset: 2px;
+}
+
+/* -- in-game HUD --------------------------------------------------------- */
+
+/* Modern emergency-training HUD: dark glass panels, hairline borders, restrained
+   elevation, and a restrained operational accent palette. Panels stay light enough
+   to keep the 3D world readable while the blur and inset highlights create depth. */
+:root {
+  --hud-bg: rgba(12, 16, 22, 0.72);
+  --hud-bg-strong: rgba(10, 13, 18, 0.88);
+  --hud-border: rgba(255, 255, 255, 0.09);
+  --hud-border-strong: rgba(255, 255, 255, 0.16);
+  --hud-text: #e8edf2;
+  --hud-text-soft: rgba(232, 237, 242, 0.62);
+  --hud-text-faint: rgba(232, 237, 242, 0.4);
+  --hud-accent: #34d399;
+  --hud-accent-soft: rgba(52, 211, 153, 0.14);
+  --hud-warning: #fbbf24;
+  --hud-danger: #fb7185;
+  --hud-info: #38bdf8;
+  --hud-radius: 10px;
+}
+
+.hud-panel {
+  border: 1px solid var(--hud-border);
+  border-left: 2px solid var(--hud-accent);
+  background: linear-gradient(160deg, rgba(20, 26, 34, 0.78), rgba(9, 12, 17, 0.86));
+  box-shadow:
+    0 10px 30px -12px rgba(0, 0, 0, 0.55),
+    0 2px 8px -2px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(14px) saturate(1.1);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+  border-radius: var(--hud-radius);
+  transition: box-shadow 240ms ease, transform 240ms cubic-bezier(0.22, 0.8, 0.24, 1), border-color 240ms ease;
+}
+
+.hud-panel:hover {
+  box-shadow:
+    0 14px 36px -12px rgba(0, 0, 0, 0.62),
+    0 3px 10px -2px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+.hud-panel-blue {
+  border-left-color: var(--hud-info);
+}
+
+.hud-panel-mint {
+  border-left-color: var(--hud-accent);
+}
+
+.hud-panel-warning {
+  border-left-color: var(--hud-warning);
+}
+
+.hud-panel-danger {
+  border-left-color: var(--hud-danger);
+}
+
+.hud-key {
+  display: inline-grid;
+  min-width: 1.55rem;
+  height: 1.55rem;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
+  color: var(--hud-text);
+  padding: 0 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  font-family: var(--font-geist-mono), monospace;
+}
+
+.hud-key.light {
+  border-color: rgba(52, 211, 153, 0.4);
+  color: var(--hud-accent);
+  background: rgba(52, 211, 153, 0.1);
+}
+
+.signal-pulse {
+  animation: signal-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes signal-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes hud-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Transient callouts settle in rather than snapping, with a subtle glass lift. */
+.hud-rise {
+  animation: hud-rise 320ms cubic-bezier(0.22, 0.8, 0.24, 1) both;
+}
+
+.hud-glass {
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-border);
+  border-radius: var(--hud-radius);
+  backdrop-filter: blur(14px) saturate(1.1);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+  box-shadow: 0 8px 24px -12px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* -- touch play ----------------------------------------------------------
+   A thumb dragging the look pad or the stick must move the evacuee, not pan
+   the page or fire the browser's pull-to-refresh. */
+html,
+body {
+  overscroll-behavior: none;
+}
+
+.drill-surface {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* -- landing page ---------------------------------------------------------
+   Neo-brutalism: 3px ink rules, hard offset shadows, no soft edges. */
+
+.brutal-rule {
+  border-bottom: 3px solid var(--ink);
+}
+
+.brutal-card {
+  border: 3px solid var(--ink);
+  background: var(--paper-light);
+  box-shadow: 8px 8px 0 var(--ink);
+}
+
+.brutal-slab {
+  border: 3px solid var(--ink);
+  box-shadow: 10px 10px 0 var(--ink);
+}
+
+.brutal-sticker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 3px solid var(--ink);
+  box-shadow: 4px 4px 0 var(--ink);
+  padding: 0.3rem 0.7rem;
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.brutal-ticker {
+  overflow: hidden;
+  border-top: 3px solid var(--ink);
+  border-bottom: 3px solid var(--ink);
+  background: var(--ink);
+}
+
+.brutal-ticker__track {
+  display: flex;
+  width: max-content;
+  animation: brutal-ticker 34s linear infinite;
+}
+
+@keyframes brutal-ticker {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.brutal-screen {
+  border: 3px solid var(--ink);
+  background: var(--night);
+  box-shadow: 12px 12px 0 var(--coral);
+}
+
+.brutal-num {
+  font-variant-numeric: tabular-nums;
+  -webkit-text-stroke: 2px var(--ink);
+  color: transparent;
+}
+
+/* -- depth ----------------------------------------------------------------
+   Neo-brutalism is flat by design, so depth here comes from parallax and hard
+   shadows that move, never from blur or gradients. Everything is driven by CSS
+   custom properties that JS writes once per frame; no layout is ever read back. */
+
+.depth-scene {
+  perspective: 1400px;
+  perspective-origin: 50% 40%;
+}
+
+/* --depth is how far a layer sits from the viewer: 0 is pinned, 3 floats most. */
+.depth-layer {
+  --depth: 1;
+  transform: translate3d(
+    calc(var(--pointer-x, 0) * var(--depth) * 9px),
+    calc(var(--pointer-y, 0) * var(--depth) * 9px),
+    0
+  );
+  transition: transform 420ms cubic-bezier(0.22, 0.8, 0.24, 1);
+  will-change: transform;
+}
+
+.tilt {
+  --tilt-max: 7deg;
+  transform: rotateX(calc(var(--tilt-y, 0) * var(--tilt-max) * -1))
+    rotateY(calc(var(--tilt-x, 0) * var(--tilt-max)))
+    translate3d(0, calc(var(--tilt-lift, 0) * -6px), 0);
+  transform-style: preserve-3d;
+  transition: transform 260ms cubic-bezier(0.22, 0.8, 0.24, 1), box-shadow 260ms ease;
+  will-change: transform;
+}
+
+/* the offset shadow swings opposite the tilt, so the card reads as lifting off the page */
+.tilt-shadow {
+  box-shadow: calc(8px - var(--tilt-x, 0) * 10px) calc(8px - var(--tilt-y, 0) * 10px) 0 var(--ink);
+}
+
+.tilt-shadow-coral {
+  box-shadow: calc(10px - var(--tilt-x, 0) * 12px) calc(10px - var(--tilt-y, 0) * 12px) 0 var(--coral);
+}
+
+.tilt-shadow-sun {
+  box-shadow: calc(10px - var(--tilt-x, 0) * 12px) calc(10px - var(--tilt-y, 0) * 12px) 0 var(--sun);
+}
+
+.tilt-shadow-violet {
+  box-shadow: calc(10px - var(--tilt-x, 0) * 12px) calc(10px - var(--tilt-y, 0) * 12px) 0 var(--violet);
+}
+
+/* content lifted toward the viewer inside a tilting card */
+.tilt-raise {
+  transform: translateZ(28px);
+  transform-style: preserve-3d;
+}
+
+.reveal {
+  opacity: 0;
+  transform: translate3d(0, 22px, 0);
+  transition: opacity 620ms cubic-bezier(0.22, 0.8, 0.24, 1), transform 620ms cubic-bezier(0.22, 0.8, 0.24, 1);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .depth-layer,
+  .tilt {
+    transform: none !important;
+  }
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Children of a revealed container arrive in sequence. Done in CSS rather than one
+   observer per item: a `display: contents` wrapper generates no box, so it can never
+   intersect and the item would sit at opacity 0 forever. */
+.reveal .stagger > * {
+  opacity: 0;
+  transform: translate3d(0, 14px, 0);
+  transition: opacity 520ms cubic-bezier(0.22, 0.8, 0.24, 1), transform 520ms cubic-bezier(0.22, 0.8, 0.24, 1);
+}
+
+.reveal.is-visible .stagger > * {
+  opacity: 1;
+  transform: none;
+}
+
+.reveal .stagger > *:nth-child(1) { transition-delay: 0ms; }
+.reveal .stagger > *:nth-child(2) { transition-delay: 70ms; }
+.reveal .stagger > *:nth-child(3) { transition-delay: 140ms; }
+.reveal .stagger > *:nth-child(4) { transition-delay: 210ms; }
+.reveal .stagger > *:nth-child(5) { transition-delay: 280ms; }
+.reveal .stagger > *:nth-child(6) { transition-delay: 350ms; }
+.reveal .stagger > *:nth-child(7) { transition-delay: 420ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal .stagger > * {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* -- touch layout ---------------------------------------------------------
+   The controls sit over a notch on one end and a home indicator on the other, so every
+   edge-anchored surface pads itself out of the insets. `--touch-dock-h` is measured from
+   the real control cluster at runtime: fixed pixel offsets were wrong on short screens. */
+
+.safe-x {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
+
+.safe-bottom {
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+}
+
+.safe-top {
+  padding-top: max(0.75rem, env(safe-area-inset-top));
+}
+
+/** Sits clear of the thumbs whatever the control cluster actually measures. */
+.above-dock {
+  bottom: calc(var(--touch-dock-h, 190px) + 0.75rem);
+}

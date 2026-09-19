@@ -1,0 +1,24 @@
+# dependencies
+/node_modules
+/infra/node_modules
+
+# build output
+/.next/
+/out/
+/build
+/infra/cdk.out/
+*.tsbuildinfo
+next-env.d.ts
+
+# secrets and local config (.env.example is the committed template)
+.env*
+!.env.example
+/infra/cdk-outputs.json
+
+# tooling
+.claude/
+.vercel
+.DS_Store
+*.pem
+npm-debug.log*
+
