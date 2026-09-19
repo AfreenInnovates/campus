@@ -23,7 +23,7 @@
       "Sid": "SendDrillReports",
       "Effect": "Allow",
       "Action": ["ses:SendEmail"],
-      "Resource": "arn:aws:ses:ap-south-1:851011315242:identity/afreenhossain0000@gmail.com"
+      "Resource": "arn:aws:ses:ap-south-1:851011315242:identity/*"
     },
     {
       "Sid": "VerifyRecipients",
