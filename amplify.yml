@@ -1,0 +1,22 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        # npm ci needs package-lock.json, which is committed, so builds are reproducible
+        - npm ci
+    build:
+      commands:
+        # NEXT_PUBLIC_* values are inlined into the client bundle here, so they must already
+        # exist as Amplify environment variables before this runs, not afterwards
+        - npm run build
+  artifacts:
+    # .next is what Amplify's WEB_COMPUTE platform expects for a Next.js SSR app; the
+    # /api routes and /simulation/room/[code] need a server, so this is not a static export
+    baseDirectory: .next
+    files:
+      - "**/*"
+  cache:
+    paths:
+      - node_modules/**/*
+      - .next/cache/**/*
