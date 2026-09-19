@@ -29,7 +29,7 @@
       "Sid": "VerifyRecipients",
       "Effect": "Allow",
       "Action": ["ses:GetEmailIdentity", "ses:CreateEmailIdentity", "ses:DeleteEmailIdentity"],
-      "Resource": "arn:aws:ses:ap-south-1:851011315242:identity/*"
+      "Resource": "*"
     }
   ]
 }

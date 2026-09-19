@@ -90,7 +90,10 @@ export async function POST(request: Request) {
     await startVerification(to, state);
     return NextResponse.json({ status: "verify" });
   } catch (error) {
-    console.error("Report request failed", error);
-    return NextResponse.json({ error: "Could not start the report. Try again." }, { status: 502 });
+    // Amplify SSR has no log group here, so the AWS error name travels in the response.
+    // It names the failing permission or service without leaking addresses or payloads.
+    const code = error instanceof Error ? error.name : "Unknown";
+    console.error("Report request failed", code, error);
+    return NextResponse.json({ error: "Could not start the report. Try again.", code }, { status: 502 });
   }
 }

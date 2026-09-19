@@ -29,11 +29,12 @@ export async function GET(request: Request) {
     // Verified with nothing parked: the report already went out on an earlier poll.
     if (!summary) return NextResponse.json({ status: "sent" });
 
-    await clearParkedReport(email);
     const sent = await sendReport(email, summary);
+    await clearParkedReport(email);
     return NextResponse.json({ status: "sent", ...sent });
   } catch (error) {
-    console.error("Report status check failed", error);
-    return NextResponse.json({ error: "Could not check verification." }, { status: 502 });
+    const code = error instanceof Error ? error.name : "Unknown";
+    console.error("Report status check failed", code, error);
+    return NextResponse.json({ error: "Could not check verification.", code }, { status: 502 });
   }
 }
