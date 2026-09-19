@@ -427,3 +427,26 @@ body {
     transform: none;
   }
 }
+
+/* -- touch layout ---------------------------------------------------------
+   The controls sit over a notch on one end and a home indicator on the other, so every
+   edge-anchored surface pads itself out of the insets. `--touch-dock-h` is measured from
+   the real control cluster at runtime: fixed pixel offsets were wrong on short screens. */
+
+.safe-x {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
+
+.safe-bottom {
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+}
+
+.safe-top {
+  padding-top: max(0.75rem, env(safe-area-inset-top));
+}
+
+/** Sits clear of the thumbs whatever the control cluster actually measures. */
+.above-dock {
+  bottom: calc(var(--touch-dock-h, 190px) + 0.75rem);
+}
