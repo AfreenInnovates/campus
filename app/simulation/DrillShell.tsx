@@ -30,6 +30,7 @@ import {
   writeVoiceEnabled,
 } from "./narration";
 import { bucketAir, bucketSmoke, type DrillContext, type DrillEvent } from "./narration-context";
+import { buildCompletionModel } from "./result-model";
 import { runtime } from "./runtime";
 import { resolveRoom, useSession } from "./session";
 import { useSimulation, watchedSector, VIEWS, type ViewMode } from "./store";
@@ -526,11 +527,6 @@ function PhoneCollapsible({ label, children }: { label: string; children: ReactN
 
 /* --------------------------------------------------------------- overlays */
 
-function formatTime(seconds: number) {
-  const whole = Math.max(0, Math.floor(seconds));
-  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
-}
-
 type Verdict = { verified: boolean; reasons: string[] };
 
 /**
@@ -593,22 +589,147 @@ function VerificationBadge({ code }: { code: string | null }) {
   );
 }
 
+function EndDialog({
+  tag,
+  headline,
+  children,
+}: {
+  tag: string;
+  headline: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="pointer-events-auto absolute inset-0 z-50 grid place-items-center overflow-y-auto bg-night/75 p-4 backdrop-blur-sm">
+      <section role="dialog" aria-modal="true" aria-labelledby="end-title" className="brutal-panel w-full max-w-lg p-5 text-ink sm:p-7">
+        <span className={`brutal-tag ${tag === "Drill complete" ? "bg-mint" : "bg-coral"}`}>{tag}</span>
+        <h2 id="end-title" className="mt-3 text-4xl font-black uppercase leading-[0.95] tracking-[-0.05em]">
+          {headline}
+        </h2>
+        {children}
+      </section>
+    </div>
+  );
+}
+
+function EndActions({
+  solo,
+  onReset,
+  onLeave,
+  onHome,
+}: {
+  solo: boolean;
+  onReset: () => void;
+  onLeave: () => void;
+  onHome: () => void;
+}) {
+  return (
+    <div className="mt-6 grid gap-3 sm:grid-cols-2">
+      {solo ? (
+        <button onClick={onReset} className="brutal-button px-4 py-3">
+          Play again
+        </button>
+      ) : (
+        <button onClick={onLeave} className="brutal-button px-4 py-3">
+          Back to lobby
+        </button>
+      )}
+      <button onClick={onHome} className="brutal-button px-4 py-3" style={{ background: "var(--paper-light)" }}>
+        Exit to home
+      </button>
+    </div>
+  );
+}
+
 function EndCard({ onReset, onLeave, onHome }: { onReset: () => void; onLeave: () => void; onHome: () => void }) {
   const complete = useSimulation((state) => state.assemblyConfirmed);
   const failed = useSimulation((state) => state.failed);
-  const solo = useSimulation((state) => state.mode.kind === "solo");
+  const mode = useSimulation((state) => state.mode);
+  const solo = mode.kind === "solo";
   const routeStatus = useSimulation((state) => state.routeStatus);
   const interventionApplied = useSimulation((state) => state.interventionApplied);
   const latestMessage = useSimulation((state) => state.latestMessage);
   const progress = useSimulation((state) => state.scenarioProgress);
   const elapsed = useSimulation((state) => state.hazardElapsed);
   const health = useSimulation((state) => state.health);
+  const smokeIntensity = useSimulation((state) => state.smokeIntensity);
+  const evidence = useSimulation((state) => state.evidence);
+  const lastAcknowledgement = useSimulation((state) => state.lastAcknowledgement);
   const reset = useSimulation((state) => state.reset);
   const room = useSession((state) => state.room);
   const code = useSession((state) => state.code);
   const abandoned = resolveRoom(room)?.outcome === "participant-left";
   if (!complete && !failed) return null;
+
   const done = CRITICAL_SCENARIO_OBJECTS.filter((id) => progress[id]).length;
+  const evacuees = room?.participants.filter((participant) => participant.role === "evacuee") ?? [];
+  const result = buildCompletionModel(mode, {
+    complete,
+    abandoned,
+    elapsed,
+    completedObjectives: done,
+    totalObjectives: CRITICAL_SCENARIO_OBJECTS.length,
+    health,
+    safeEvacuees: complete ? evacuees.length : 0,
+    totalEvacuees: evacuees.length,
+    routeStatus,
+    smokeIntensity,
+  });
+
+  if (result.role === "warden") {
+    const evidenceItems = Object.values(evidence);
+    const verified = evidenceItems.filter((item) => item.status === "VERIFIED").length;
+    const observed = evidenceItems.filter((item) => item.status === "OBSERVED").length;
+    const pending = evidenceItems.filter((item) => item.status === "UNKNOWN").length;
+    const assignedSector = mode.kind === "warden" ? mode.sectorId : "sec";
+    const outcome = complete
+      ? "The evacuee reached the marked assembly point."
+      : abandoned
+        ? "The drill ended because the participant did not return."
+        : "The evacuee did not reach the marked assembly point.";
+    const incident = interventionApplied
+      ? "Ventilation override was applied to reduce smoke exposure."
+      : routeStatus === "unsafe"
+        ? "The east route was marked unsafe during the drill."
+        : "No route intervention was recorded.";
+    const coordination = latestMessage
+      ? `Route guidance delivered: ${latestMessage.caption}`
+      : "No route guidance message was delivered to the evacuee.";
+    const acknowledgement = lastAcknowledgement
+      ? `${lastAcknowledgement.accepted ? "Accepted" : "Denied"}: ${commandByCode(lastAcknowledgement.command).label}.`
+      : "No coordination command acknowledgement was recorded.";
+    const evidenceSummary = `${verified} verified · ${observed} observed · ${pending} awaiting review.`;
+
+    return (
+      <EndDialog tag={result.tag} headline={result.headline}>
+        <dl className="mt-5 grid grid-cols-3 border-2 border-ink bg-paper">
+          {result.metrics.map((metric, index) => (
+            <div key={metric.label} className={`p-3 ${index ? "border-l-2 border-ink" : ""}`}>
+              <dt className="text-[9px] font-black uppercase tracking-[0.18em] text-ink-soft">{metric.label}</dt>
+              <dd className="mt-1 truncate font-mono text-xl font-black uppercase">{metric.value}</dd>
+            </div>
+          ))}
+        </dl>
+        <div className="mt-5 space-y-3">
+          {(
+            [
+              ["Evacuation status", outcome, "var(--mint)"],
+              ["Incident state", `${incident} Assigned sector: ${roomById(assignedSector).name}.`, "var(--danger)"],
+              ["Coordination", `${coordination} ${acknowledgement}`, "var(--sun)"],
+              ["Evidence review", evidenceSummary, "var(--violet)"],
+            ] as [string, string, string][]
+          ).map(([label, detail, color]) => (
+            <div key={label} className="border-l-4 pl-3" style={{ borderColor: color }}>
+              <div className="text-[10px] font-black uppercase tracking-[0.16em]">{label}</div>
+              <div className="mt-0.5 text-sm text-ink-soft">{detail}</div>
+            </div>
+          ))}
+        </div>
+        <VerificationBadge code={code} />
+        <EndActions solo={false} onReset={onReset} onLeave={onLeave} onHome={onHome} />
+      </EndDialog>
+    );
+  }
+
   const coordination = abandoned
     ? "A participant disconnected and did not come back before the countdown ran out, so the drill was ended."
     : failed
@@ -635,57 +756,34 @@ function EndCard({ onReset, onLeave, onHome }: { onReset: () => void; onLeave: (
     ["What do we practise next?", practice, "var(--violet)"],
   ];
   return (
-    <div className="pointer-events-auto absolute inset-0 z-50 grid place-items-center overflow-y-auto bg-night/75 p-4 backdrop-blur-sm">
-      <section role="dialog" aria-modal="true" aria-labelledby="end-title" className="brutal-panel w-full max-w-lg p-5 text-ink sm:p-7">
-        <span className={`brutal-tag ${complete ? "bg-mint" : "bg-coral"}`}>{complete ? "Drill complete" : "Drill ended"}</span>
-        <h2 id="end-title" className="mt-3 text-4xl font-black uppercase leading-[0.95] tracking-[-0.05em]">
-          {complete ? "You got out safely." : abandoned ? "A player did not return." : "Not this time."}
-        </h2>
-        <dl className="mt-5 grid grid-cols-3 border-2 border-ink bg-paper">
-          {(
-            [
-              ["Time", formatTime(elapsed)],
-              ["Steps", `${done}/${CRITICAL_SCENARIO_OBJECTS.length}`],
-              ["Health", String(Math.round(health))],
-            ] as const
-          ).map(([label, value], index) => (
-            <div key={label} className={`p-3 ${index ? "border-l-2 border-ink" : ""}`}>
-              <dt className="text-[9px] font-black uppercase tracking-[0.18em] text-ink-soft">{label}</dt>
-              <dd className="mt-1 font-mono text-2xl font-black">{value}</dd>
-            </div>
-          ))}
-        </dl>
-        <div className="mt-5 space-y-3">
-          {debrief.map(([question, answer, color]) => (
-            <div key={question} className="border-l-4 pl-3" style={{ borderColor: color }}>
-              <div className="text-[10px] font-black uppercase tracking-[0.16em]">{question}</div>
-              <div className="mt-0.5 text-sm text-ink-soft">{answer}</div>
-            </div>
-          ))}
-        </div>
-        {!solo && <VerificationBadge code={code} />}
-        <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          {solo ? (
-            <button
-              onClick={() => {
-                reset();
-                onReset();
-              }}
-              className="brutal-button px-4 py-3"
-            >
-              Play again
-            </button>
-          ) : (
-            <button onClick={onLeave} className="brutal-button px-4 py-3">
-              Back to lobby
-            </button>
-          )}
-          <button onClick={onHome} className="brutal-button px-4 py-3" style={{ background: "var(--paper-light)" }}>
-            Exit to home
-          </button>
-        </div>
-      </section>
-    </div>
+    <EndDialog tag={result.tag} headline={result.headline}>
+      <dl className="mt-5 grid grid-cols-3 border-2 border-ink bg-paper">
+        {result.metrics.map((metric, index) => (
+          <div key={metric.label} className={`p-3 ${index ? "border-l-2 border-ink" : ""}`}>
+            <dt className="text-[9px] font-black uppercase tracking-[0.18em] text-ink-soft">{metric.label}</dt>
+            <dd className="mt-1 font-mono text-2xl font-black">{metric.value}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="mt-5 space-y-3">
+        {debrief.map(([question, answer, color]) => (
+          <div key={question} className="border-l-4 pl-3" style={{ borderColor: color }}>
+            <div className="text-[10px] font-black uppercase tracking-[0.16em]">{question}</div>
+            <div className="mt-0.5 text-sm text-ink-soft">{answer}</div>
+          </div>
+        ))}
+      </div>
+      {!solo && <VerificationBadge code={code} />}
+      <EndActions
+        solo={solo}
+        onReset={() => {
+          reset();
+          onReset();
+        }}
+        onLeave={onLeave}
+        onHome={onHome}
+      />
+    </EndDialog>
   );
 }
 

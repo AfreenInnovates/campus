@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
     "typecheck": "next typegen && tsc --noEmit",
     "env:pull": "node -e \"const {execSync}=require('child_process');const outputs=JSON.parse(execSync('aws cloudformation describe-stacks --stack-name CampusEvacStack --output json')).Stacks[0].Outputs;const v=Object.fromEntries(outputs.map(o=>[o.OutputKey,o.OutputValue]));require('fs').writeFileSync('.env.local','NEXT_PUBLIC_EVENTS_HTTP_HOST='+v.HttpHost+'\\nNEXT_PUBLIC_EVENTS_REALTIME_URL='+v.RealtimeEndpoint+'\\nNEXT_PUBLIC_EVENTS_API_KEY='+v.ApiKey+'\\n');console.log('.env.local written from CampusEvacStack outputs')\"",
     "infra:install": "npm --prefix infra ci",
@@ -42,6 +43,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   }
 }
