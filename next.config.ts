@@ -43,8 +43,23 @@ const securityHeaders = [
     : []),
 ];
 
+/**
+ * Server-side configuration that has to survive the build.
+ *
+ * Amplify exposes its environment variables to the build shell but not to the SSR compute
+ * runtime, so a route handler reading process.env at request time finds nothing there.
+ * Listing the keys here inlines their build-time values into the server bundle, which is 
+ * what makes them readable in the deployed function. Empty keys are dropped rather than 
+ * inlined, so an unset value falls through to whatever the runtime does provide.
+ */
+const RUNTIME_KEYS = ["SES_REGION", "REPORTS_TABLE", "REPORT_FROM_EMAIL", "POLLY_REGION"];
+const runtimeEnv = Object.fromEntries(
+  RUNTIME_KEYS.map((key) => [key, process.env[key]?.trim() ?? ""]).filter(([, value]) => value !== ""),
+) as Record<string, string>;
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  env: runtimeEnv,
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },
