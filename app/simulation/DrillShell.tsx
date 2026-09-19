@@ -638,6 +638,8 @@ function ReportMailer() {
   const code = useSession((state) => state.code);
   const [email, setEmail] = useState("");
   const [stage, setStage] = useState<MailerStage>("idle");
+  // A returning player is already verified, so the report goes out without the extra step.
+  const [knownAddress, setKnownAddress] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [timedOut, setTimedOut] = useState(false);
   const address = email.trim();
@@ -657,6 +659,7 @@ function ReportMailer() {
         const response = await fetch(`/api/report/status?email=${encodeURIComponent(address)}`);
         const body = (await response.json().catch(() => ({}))) as { status?: string };
         if (!cancelled && body.status === "sent") {
+          setKnownAddress(false);
           setStage("sent");
           return;
         }
@@ -688,8 +691,10 @@ function ReportMailer() {
         body: JSON.stringify({ email: address, summary: drillSummary(code) }),
       });
       const body = (await response.json().catch(() => ({}))) as { status?: string; error?: string };
-      if (response.ok && body.status === "sent") setStage("sent");
-      else if (response.ok && body.status === "verify") setStage("verify");
+      if (response.ok && body.status === "sent") {
+        setKnownAddress(true);
+        setStage("sent");
+      } else if (response.ok && body.status === "verify") setStage("verify");
       else {
         setStage("error");
         setError(body.error ?? "Could not send the report.");
@@ -703,8 +708,11 @@ function ReportMailer() {
   if (stage === "sent")
     return (
       <div className="mt-5 border-2 border-ink bg-mint/25 px-3 py-2.5">
-        <div className="text-[10px] font-black uppercase tracking-[0.16em]">Report sent</div>
+        <div className="text-[10px] font-black uppercase tracking-[0.16em]">
+          {knownAddress ? "Address already verified - sending now" : "Verified - report sent"}
+        </div>
         <p className="mt-0.5 text-[12px] leading-snug">
+          {knownAddress ? "No confirmation needed this time. " : "Thanks for confirming. "}
           On its way to <b>{address}</b>. If it is not there in a minute, check spam.
         </p>
       </div>
