@@ -839,16 +839,37 @@ function Briefing() {
       });
     };
     window.addEventListener("start-briefing", start);
-    let autoStart: number | undefined;
+
+    // A returning player skips the onboarding card, so the briefing used to begin on a timer
+    // 700ms after mount — which in solo practice is simply "the page loaded". Opening the tab
+    // would start talking at you. Wait for the player to actually touch the game instead.
+    // That is also the gesture the browser requires before any audio may play, so the voice
+    // can never be queued up now and erupt later.
+    let waitForPlayer: (() => void) | undefined;
     try {
-      if (localStorage.getItem("campusevac:onboarding:v2") === "complete") autoStart = window.setTimeout(start, 700);
+      if (localStorage.getItem("campusevac:onboarding:v2") === "complete") {
+        const begin = () => {
+          waitForPlayer?.();
+          waitForPlayer = undefined;
+          start();
+        };
+        for (const event of ["pointerdown", "keydown", "touchstart"]) {
+          window.addEventListener(event, begin, { once: true, passive: true });
+        }
+        waitForPlayer = () => {
+          for (const event of ["pointerdown", "keydown", "touchstart"]) {
+            window.removeEventListener(event, begin);
+          }
+        };
+      }
     } catch {
       /* transcript remains available from the mission brief */
     }
+
     return () => {
       disposed = true;
       window.removeEventListener("start-briefing", start);
-      if (autoStart) window.clearTimeout(autoStart);
+      waitForPlayer?.();
       stopNarration();
     };
   }, [beginBriefing, completeBriefing, mode.kind]);
