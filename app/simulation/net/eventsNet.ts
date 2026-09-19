@@ -460,6 +460,13 @@ export class EventsNet implements NetClient {
     const existing = room.participants.some((item) => item.id === participant.id);
     if (!existing && room.phase !== "lobby" && room.phase !== "preparing") return "unavailable";
     if (!existing && room.participants.length >= room.maxPlayers) return "full";
+    if (existing) {
+      // a returning browser cancels the countdown immediately rather than waiting for its
+      // first presence ping to land
+      if (this.graceTimer) clearTimeout(this.graceTimer);
+      this.graceTimer = null;
+      this.lastSeen.set(participant.id, Date.now());
+    }
     const participants = existing
       ? room.participants.map((item) =>
           item.id === participant.id ? { ...item, name: participant.name, connected: true } : item,

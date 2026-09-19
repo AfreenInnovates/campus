@@ -47,6 +47,7 @@ const wardenStateSubs = new Set<(state: WardenState) => void>();
 const routeMessageSubs = new Set<(message: RouteMessage) => void>();
 const acknowledgementSubs = new Set<(acknowledgement: CommandAcknowledgement) => void>();
 let unsubscribe: (() => void) | null = null;
+let unloadListener: (() => void) | null = null;
 
 const subscribe =
   <T>(subscribers: Set<(value: T) => void>) =>
@@ -103,6 +104,17 @@ export const useSession = create<SessionState>()((set, get) => {
 
       // only a joined room records progress; solo practice leaves this unset and publishes nothing
       setProgressPublisher((step, elapsed) => net.publishProgress(step, elapsed));
+
+      // A closed tab is otherwise only noticed after the presence timeout. This is best
+      // effort — the browser may kill the socket first — so it shortens the common case
+      // rather than replacing the timeout.
+      const announceLeaving = () => net.leave(code, myId);
+      window.addEventListener("pagehide", announceLeaving);
+      window.addEventListener("beforeunload", announceLeaving);
+      unloadListener = () => {
+        window.removeEventListener("pagehide", announceLeaving);
+        window.removeEventListener("beforeunload", announceLeaving);
+      };
 
       unsubscribe = net.onMessage((event: NetEvent) => {
         switch (event.type) {
@@ -172,6 +184,8 @@ export const useSession = create<SessionState>()((set, get) => {
 
     disconnect: () => {
       setProgressPublisher(null);
+      unloadListener?.();
+      unloadListener = null;
       unsubscribe?.();
       unsubscribe = null;
       get().net?.disconnect();
