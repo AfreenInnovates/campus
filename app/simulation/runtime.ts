@@ -40,5 +40,7 @@ export const runtime = {
   /* input shared by keyboard and coarse-pointer controls */
   jumpAt: -1e9,
   touchMove: { x: 0, y: 0 },
+  /** Thumb pushed to the edge of the stick: the touch equivalent of holding Shift. */
+  touchSprint: false,
   touchLook: { dx: 0, dy: 0 },
 };
