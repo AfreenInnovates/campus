@@ -104,6 +104,7 @@ function wardenState(room: DrillRoom, drill: DrillAuthority, warden: Participant
   return {
     kind: "warden",
     t: Date.now(),
+    hazardElapsed: state?.hazardElapsed ?? 0,
     stateVersion: drill.stateVersion,
     eventSequence: drill.eventSequence,
     assignedSector,

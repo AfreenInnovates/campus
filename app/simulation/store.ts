@@ -17,6 +17,7 @@ import {
   SMOKE_EXPOSURE_THRESHOLD,
   isRouteBlocked,
 } from "./smoke";
+import { REPORT_STEPS, splitFor, type DrillSummary } from "./report";
 import type {
   CommandAcknowledgement,
   EvidenceRecord,
@@ -99,6 +100,14 @@ export interface SimulationState {
   air: number;
   smokeIntensity: number;
   hazardElapsed: number;
+  /** Seconds into the drill at which each objective was completed; drives the report splits. */
+  objectiveTimes: Partial<Record<ScenarioObjectId, number>>;
+  /** Invalid actions attempted, e.g. leaving before the checklist was clear. */
+  mistakes: { at: number; text: string }[];
+  /** Low-water mark for air, kept because the live value recovers out of smoke. */
+  lowestAir: number;
+  /** When the first warden route message arrived, in drill seconds. */
+  routeMessageAt: number | null;
   routeBlocked: boolean;
   routeStatus: "clear" | "unsafe" | "intervened";
   stamina: number;
@@ -149,6 +158,10 @@ const initial = {
   scenarioProgress: newScenarioProgress(),
   smokeIntensity: 0,
   hazardElapsed: 0,
+  objectiveTimes: {} as Partial<Record<ScenarioObjectId, number>>,
+  mistakes: [] as { at: number; text: string }[],
+  lowestAir: 100,
+  routeMessageAt: null as number | null,
   routeBlocked: false,
   routeStatus: "clear" as const,
   stamina: 100,
@@ -205,11 +218,16 @@ export const useSimulation = create<SimulationState>()((set, get) => ({
     if (id === "main-exit") {
       const missing = CRITICAL_SCENARIO_OBJECTS.find((item) => !state.scenarioProgress[item]);
       if (missing) {
-        get().push(`Exit locked. Resolve the ${scenarioObjectById(missing).label.toLowerCase()} first.`, "bad");
+        const detail = scenarioObjectById(missing).label.toLowerCase();
+        set((current) => ({
+          mistakes: [...current.mistakes, { at: current.hazardElapsed, text: `Tried to exit before the ${detail}` }],
+        }));
+        get().push(`Exit locked. Resolve the ${detail} first.`, "bad");
         return;
       }
       set((current) => ({
         scenarioProgress: { ...current.scenarioProgress, [id]: true },
+        objectiveTimes: { ...current.objectiveTimes, [id]: current.hazardElapsed },
       }));
       progressPublisher?.(id, get().hazardElapsed);
       get().confirmAssembly();
@@ -217,7 +235,10 @@ export const useSimulation = create<SimulationState>()((set, get) => ({
     }
 
     const progress = { ...state.scenarioProgress, [id]: true };
-    const changes: Partial<SimulationState> = { scenarioProgress: progress };
+    const changes: Partial<SimulationState> = {
+      scenarioProgress: progress,
+      objectiveTimes: { ...state.objectiveTimes, [id]: state.hazardElapsed },
+    };
     if (id === "emergency-backpack") {
       changes.hasBackpack = true;
       get().push("Emergency backpack secured. The radio is online.", "good");
@@ -289,6 +310,7 @@ export const useSimulation = create<SimulationState>()((set, get) => ({
       routeStatus,
       air,
       health,
+      lowestAir: Math.min(state.lowestAir, air),
     });
 
     if (
@@ -305,7 +327,10 @@ export const useSimulation = create<SimulationState>()((set, get) => ({
   },
 
   receiveRouteMessage: (message) => {
-    set({ latestMessage: message });
+    set((state) => ({
+      latestMessage: message,
+      routeMessageAt: state.routeMessageAt ?? state.hazardElapsed,
+    }));
     get().push(message.caption, "good");
   },
 
@@ -340,6 +365,7 @@ export const useSimulation = create<SimulationState>()((set, get) => ({
   applyWardenState: (state) => {
     const evidence = Object.fromEntries(state.evidence.map((item) => [item.id, item]));
     set({
+      hazardElapsed: state.hazardElapsed ?? 0,
       air: state.air,
       health: state.health,
       hasBackpack: state.hasBackpack,
@@ -360,6 +386,24 @@ export const useSimulation = create<SimulationState>()((set, get) => ({
     });
   },
 }));
+
+/** Snapshot of the finished run, in the shape the report endpoint expects. */
+export function drillSummary(roomCode: string | null): DrillSummary {
+  const state = useSimulation.getState();
+  return {
+    outcome: state.assemblyConfirmed ? "escaped" : "failed",
+    durationSeconds: state.hazardElapsed,
+    objectivesCompleted: CRITICAL_SCENARIO_OBJECTS.filter((id) => state.scenarioProgress[id]).length,
+    objectivesTotal: CRITICAL_SCENARIO_OBJECTS.length,
+    splits: REPORT_STEPS.map((id) => splitFor(id, state.objectiveTimes)),
+    mistakes: state.mistakes,
+    health: state.health,
+    lowestAir: state.lowestAir,
+    routeMessageAt: state.routeMessageAt,
+    interventionApplied: state.interventionApplied,
+    roomCode,
+  };
+}
 
 function sectorLabel(sector: RoomId) {
   return {

@@ -141,6 +141,8 @@ export interface EvacueeState {
 export interface WardenState {
   kind: "warden";
   t: number;
+  /** Mirrored from the evacuee so both debriefs report the same drill time. */
+  hazardElapsed: number;
   stateVersion: number;
   eventSequence: number;
   assignedSector: RoomId;
