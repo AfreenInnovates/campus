@@ -2,11 +2,10 @@
 
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import Minimap from "./components/Minimap";
 import TouchControls from "./components/TouchControls";
 import { useCoarsePointer } from "./useCoarsePointer";
-import { COMMANDS, commandByCode, type CommandCode } from "./commands";
 import {
   CRITICAL_SCENARIO_OBJECTS,
   nextScenarioGuidance,
@@ -32,7 +31,7 @@ import {
 import { bucketAir, bucketSmoke, type DrillContext, type DrillEvent } from "./narration-context";
 import { runtime } from "./runtime";
 import { resolveRoom, useSession } from "./session";
-import { useSimulation, watchedSector, VIEWS, type ViewMode } from "./store";
+import { drillSummary, useSimulation, watchedSector, VIEWS, type ViewMode } from "./store";
 import { RECONNECT_GRACE_MS, type EvidenceStatus, type RouteMessage } from "./net/types";
 
 const DrillCanvas = dynamic(() => import("./DrillCanvas"), {
@@ -273,12 +272,11 @@ function NarrationCaption() {
 
 /* ------------------------------------------------------------ warden panels */
 
+/** Read-only sector feed. Every warden action lives in the command deck instead. */
 function EvidencePanel() {
   const mode = useSimulation((state) => state.mode);
   const view = useSimulation((state) => state.view);
   const evidenceMap = useSimulation((state) => state.evidence);
-  const observeEvidence = useSession((state) => state.observeEvidence);
-  const sendCommand = useSession((state) => state.sendCommand);
   const evidence = Object.values(evidenceMap);
   const [now, setNow] = useState(() => Date.now());
 
@@ -290,47 +288,28 @@ function EvidencePanel() {
   if (view === "evacuee" || (mode.kind !== "warden" && evidence.length === 0)) return null;
 
   return (
-    <div className="hud-panel pointer-events-auto w-[min(22rem,calc(100vw-1.5rem))] p-3">
+    <div className="hud-panel pointer-events-auto w-[min(19rem,calc(100vw-1.5rem))] p-3">
       <div className="flex items-baseline justify-between border-b border-paper/15 pb-2">
-        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-sun">Evidence</span>
-        <span className="font-mono text-[10px] text-paper/50">{evidence.length} items</span>
+        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-sun">Sector feed</span>
+        <span className="font-mono text-[10px] text-paper/50">{evidence.length}</span>
       </div>
       {evidence.length === 0 ? (
         <p className="mt-3 text-[11px] text-paper/55">Waiting for the sector feed.</p>
       ) : (
-        <ul className="mt-2 space-y-2">
-          {evidence.map((item) => {
-            const color = statusColor(item.status);
-            const age = item.observedAt ? `${Math.max(0, Math.floor((now - item.observedAt) / 1000))}s ago` : "not observed yet";
-            return (
-              <li key={item.id} className="border-b border-paper/10 pb-2 last:border-0 last:pb-0">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-[12px] font-bold text-paper">{item.label}</div>
-                    <div className="mt-0.5 text-[10px] text-paper/50">
-                      {item.source} · {age}
-                    </div>
-                  </div>
-                  <span className="shrink-0 font-mono text-[9px] font-black" style={{ color }}>
-                    {item.status}
-                  </span>
-                </div>
-                <div className="mt-1 text-[11px] leading-snug text-paper/70">{item.nextAction}</div>
-                <div className="mt-2 flex gap-2">
-                  {item.status === "UNKNOWN" && (
-                    <button onClick={() => observeEvidence(item.id)} className="border-2 border-sun px-2 py-1 text-[9px] font-black uppercase tracking-wider text-sun hover:bg-sun hover:text-ink">
-                      Observe
-                    </button>
-                  )}
-                  {item.status === "OBSERVED" && (
-                    <button onClick={() => sendCommand("VERIFY_EAST_ROUTE", item.id)} className="border-2 border-mint px-2 py-1 text-[9px] font-black uppercase tracking-wider text-mint hover:bg-mint hover:text-ink">
-                      Verify
-                    </button>
-                  )}
-                </div>
-              </li>
-            );
-          })}
+        <ul className="mt-2 space-y-1.5">
+          {evidence.map((item) => (
+            <li key={item.id} className="flex items-center justify-between gap-2">
+              <span className="truncate text-[11px] text-paper/80">{item.label}</span>
+              <span className="flex shrink-0 items-center gap-2 font-mono text-[9px]">
+                <span className="text-paper/40">
+                  {item.observedAt ? `${Math.max(0, Math.floor((now - item.observedAt) / 1000))}s` : "--"}
+                </span>
+                <span className="font-black" style={{ color: statusColor(item.status) }}>
+                  {item.status}
+                </span>
+              </span>
+            </li>
+          ))}
         </ul>
       )}
     </div>
@@ -433,6 +412,12 @@ function HazardBanner() {
   );
 }
 
+/**
+ * The warden's only set of controls: observe, verify, then act.
+ *
+ * Every action starts locked because the sector evidence starts UNKNOWN, so each tile
+ * carries the reason it is not available yet. Without that the deck reads as broken.
+ */
 function CommandDeck() {
   const mode = useSimulation((state) => state.mode);
   const evidence = useSimulation((state) => state.evidence["east-route-evidence"]);
@@ -440,61 +425,103 @@ function CommandDeck() {
   const scenarioProgress = useSimulation((state) => state.scenarioProgress);
   const lastAcknowledgement = useSimulation((state) => state.lastAcknowledgement);
   const sendCommand = useSession((state) => state.sendCommand);
+  const observeEvidence = useSession((state) => state.observeEvidence);
   const guidance = nextScenarioGuidance(scenarioProgress);
-  const [sent, setSent] = useState<CommandCode | null>(null);
+  const [sent, setSent] = useState<string | null>(null);
   if (mode.kind !== "warden") return null;
+
+  const status = evidence?.status ?? null;
+  const observed = status === "OBSERVED";
+  const verified = status === "VERIFIED";
+
+  const act = (key: string, run: () => void) => () => {
+    run();
+    setSent(key);
+    playSignal("command");
+    window.setTimeout(() => setSent((current) => (current === key ? null : current)), 900);
+  };
+
+  const steps = [
+    {
+      key: "OBSERVE",
+      label: "Observe",
+      ready: status === "UNKNOWN",
+      hint: "Read the sector sensor.",
+      locked: evidence ? "Already read" : "Waiting for the feed",
+      color: "#facc15",
+      run: act("OBSERVE", () => evidence && observeEvidence(evidence.id)),
+    },
+    {
+      key: "VERIFY_EAST_ROUTE",
+      label: "Verify",
+      ready: observed,
+      hint: "Confirm it before you act.",
+      locked: verified ? "Confirmed" : "Observe first",
+      color: "#10b981",
+      run: act("VERIFY_EAST_ROUTE", () => sendCommand("VERIFY_EAST_ROUTE", "east-route-evidence")),
+    },
+    {
+      key: "SEND_WEST_ROUTE",
+      label: "Send route",
+      ready: verified,
+      hint: "Send them west, away from the block.",
+      locked: "Verify first",
+      color: "#38bdf8",
+      run: act("SEND_WEST_ROUTE", () => sendCommand("SEND_WEST_ROUTE", "east-route-evidence")),
+    },
+    {
+      key: "APPLY_VENTILATION",
+      label: "Clear smoke",
+      ready: verified && !interventionApplied,
+      hint: "One ventilation override.",
+      locked: interventionApplied ? "Already used" : "Verify first",
+      color: "#a78bfa",
+      run: act("APPLY_VENTILATION", () => sendCommand("APPLY_VENTILATION")),
+    },
+  ];
+
   return (
-    <div className="hud-panel w-full p-2.5 sm:w-[min(42rem,calc(100vw-1.5rem))]">
+    <div className="hud-panel w-full p-2.5 sm:w-[min(36rem,calc(100vw-1.5rem))]">
       <div className="flex items-center justify-between gap-3 border-b border-paper/15 pb-1.5">
-        <div className="text-[10px] font-black uppercase tracking-[0.18em] text-sun">Warden commands</div>
-        <span className="font-mono text-[9px] text-paper/50">sector / {mode.sectorId}</span>
+        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-sun">Warden commands</span>
+        <span className="font-mono text-[9px] text-paper/50">{status ? status.toLowerCase() : "no feed"}</span>
       </div>
-      <div className="mt-2 flex gap-1 overflow-x-auto sm:gap-1.5">
-        {COMMANDS.map((command) => {
-          const disabled =
-            command.code === "VERIFY_EAST_ROUTE"
-              ? evidence?.status !== "OBSERVED"
-              : command.code === "SEND_WEST_ROUTE" || command.code === "MARK_EAST_UNSAFE"
-                ? evidence?.status !== "VERIFIED"
-                : interventionApplied || evidence?.status !== "VERIFIED";
-          return (
-            <button
-              key={command.code}
-              disabled={disabled}
-              onClick={() => {
-                sendCommand(command.code, command.code === "APPLY_VENTILATION" ? undefined : "east-route-evidence");
-                setSent(command.code);
-                playSignal("command");
-                window.setTimeout(() => setSent((current) => (current === command.code ? null : current)), 900);
-              }}
-              className="min-w-0 flex-1 border-2 border-paper/15 bg-night/60 px-1 py-2.5 text-center transition enabled:hover:border-paper/50 disabled:cursor-not-allowed disabled:opacity-30 sm:min-w-[6.5rem] sm:py-2"
-              style={{ borderLeftColor: command.color, borderLeftWidth: 4 }}
-            >
-              <span className="block font-mono text-[9px] font-black" style={{ color: command.color }}>
-                {sent === command.code ? "SENT" : command.label}
+      <div className="mt-2 grid grid-cols-4 gap-1.5">
+        {steps.map((item, index) => (
+          <button
+            key={item.key}
+            disabled={!item.ready}
+            onClick={item.run}
+            title={item.ready ? item.hint : item.locked}
+            className="min-w-0 border-2 border-paper/15 bg-night/60 px-1.5 py-2 text-left transition enabled:hover:border-paper/60 disabled:cursor-not-allowed disabled:opacity-40"
+            style={{ borderLeftColor: item.color, borderLeftWidth: 4 }}
+          >
+            <span className="flex items-baseline gap-1.5">
+              <span className="font-mono text-[9px] text-paper/40">{index + 1}</span>
+              <span
+                className="truncate font-mono text-[10px] font-black"
+                style={{ color: item.ready ? item.color : "var(--paper)" }}
+              >
+                {sent === item.key ? "SENT" : item.label}
               </span>
-              <span className="mt-0.5 hidden truncate text-[9px] text-paper/55 sm:block">{command.detail}</span>
-            </button>
-          );
-        })}
+            </span>
+            <span className="mt-0.5 block truncate text-[9px] text-paper/50">
+              {item.ready ? item.hint : item.locked}
+            </span>
+          </button>
+        ))}
       </div>
-      <div className="mt-2 border-l-4 border-violet bg-paper/5 px-2 py-1.5">
-        <div className="text-[9px] font-black uppercase tracking-[0.18em] text-violet">Evacuee&apos;s next step</div>
-        <div className="mt-0.5 text-[12px] font-black text-paper">
-          {guidance.label} <span className="font-mono text-[9px] font-normal uppercase text-paper/50">/ {roomById(guidance.room).name}</span>
-        </div>
-        <div className="mt-0.5 text-[10px] leading-snug text-paper/65">{guidance.instruction}</div>
+      <div className="mt-2 flex items-center justify-between gap-3 border-t border-paper/15 pt-1.5 text-[10px]">
+        <span className="truncate text-paper/65">
+          Next: <b className="text-paper">{guidance.label}</b>{" "}
+          <span className="font-mono text-[9px] uppercase text-paper/45">/ {roomById(guidance.room).name}</span>
+        </span>
+        {lastAcknowledgement && !lastAcknowledgement.accepted && (
+          <span className="shrink-0 font-mono text-[9px] font-black text-danger">
+            {lastAcknowledgement.reason ?? "denied"}
+          </span>
+        )}
       </div>
-      <div className="mt-1.5 flex justify-between gap-3 text-[9px] uppercase tracking-widest text-paper/45">
-        <span>Observe, verify, then send one clear message.</span>
-        <span>{Object.values(scenarioProgress).filter(Boolean).length}/7 steps</span>
-      </div>
-      {lastAcknowledgement && (
-        <div className="mt-2 border-t border-paper/15 pt-2 text-[10px]" style={{ color: lastAcknowledgement.accepted ? "var(--mint)" : "var(--danger)" }}>
-          {lastAcknowledgement.accepted ? "Accepted" : "Denied"}: {commandByCode(lastAcknowledgement.command).label}
-          {lastAcknowledgement.reason ? ` - ${lastAcknowledgement.reason}` : ""}
-        </div>
-      )}
     </div>
   );
 }
@@ -593,10 +620,167 @@ function VerificationBadge({ code }: { code: string | null }) {
   );
 }
 
+type MailerStage = "idle" | "sending" | "verify" | "sent" | "error";
+
+/** How long the end card keeps watching for the participant to confirm their address. */
+const VERIFY_POLL_MS = 3_000;
+const VERIFY_WINDOW_MS = 10 * 60_000;
+
+/**
+ * Emails the participant their own report.
+ *
+ * SES will not deliver to an unverified address while the account is in the sandbox, so an
+ * unknown address is sent a confirmation link and the run is held server-side. This then
+ * polls until it lands, which is why the wait is explained on screen rather than silent.
+ */
+function ReportMailer() {
+  const warden = useSimulation((state) => state.mode.kind === "warden");
+  const code = useSession((state) => state.code);
+  const [email, setEmail] = useState("");
+  const [stage, setStage] = useState<MailerStage>("idle");
+  const [error, setError] = useState<string | null>(null);
+  const [timedOut, setTimedOut] = useState(false);
+  const address = email.trim();
+
+  useEffect(() => {
+    if (stage !== "verify" || !address) return;
+    const startedAt = Date.now();
+    let cancelled = false;
+
+    const poll = async () => {
+      if (cancelled) return;
+      if (Date.now() - startedAt > VERIFY_WINDOW_MS) {
+        setTimedOut(true);
+        return;
+      }
+      try {
+        const response = await fetch(`/api/report/status?email=${encodeURIComponent(address)}`);
+        const body = (await response.json().catch(() => ({}))) as { status?: string };
+        if (!cancelled && body.status === "sent") {
+          setStage("sent");
+          return;
+        }
+      } catch {
+        /* offline or a blip: the next tick tries again */
+      }
+      if (!cancelled) timer = window.setTimeout(poll, VERIFY_POLL_MS);
+    };
+
+    let timer = window.setTimeout(poll, VERIFY_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [stage, address]);
+
+  if (warden) return null;
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (stage === "sending" || !address) return;
+    setStage("sending");
+    setError(null);
+    setTimedOut(false);
+    try {
+      const response = await fetch("/api/report", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: address, summary: drillSummary(code) }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { status?: string; error?: string };
+      if (response.ok && body.status === "sent") setStage("sent");
+      else if (response.ok && body.status === "verify") setStage("verify");
+      else {
+        setStage("error");
+        setError(body.error ?? "Could not send the report.");
+      }
+    } catch {
+      setStage("error");
+      setError("Could not reach the server. Check your connection.");
+    }
+  };
+
+  if (stage === "sent")
+    return (
+      <div className="mt-5 border-2 border-ink bg-mint/25 px-3 py-2.5">
+        <div className="text-[10px] font-black uppercase tracking-[0.16em]">Report sent</div>
+        <p className="mt-0.5 text-[12px] leading-snug">
+          On its way to <b>{address}</b>. If it is not there in a minute, check spam.
+        </p>
+      </div>
+    );
+
+  if (stage === "verify")
+    return (
+      <div className="mt-5 border-2 border-ink bg-sun/25 px-3 py-2.5">
+        <div className="text-[10px] font-black uppercase tracking-[0.16em]">One step first</div>
+        <p className="mt-0.5 text-[12px] leading-snug">
+          We sent a confirmation link to <b>{address}</b>. Open it, and your report arrives here within
+          a few seconds. Keep this page open.
+        </p>
+        {timedOut ? (
+          <button
+            onClick={() => {
+              setTimedOut(false);
+              setStage("verify");
+            }}
+            className="mt-2 border-2 border-ink px-2.5 py-1 text-[10px] font-black uppercase tracking-wider"
+          >
+            Still waiting - check again
+          </button>
+        ) : (
+          <div className="mt-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-ink-soft">
+            <span className="inline-block h-2 w-2 animate-pulse bg-ink" aria-hidden />
+            Waiting for confirmation
+          </div>
+        )}
+      </div>
+    );
+
+  return (
+    <form onSubmit={submit} className="mt-5 border-2 border-ink bg-paper-light p-3">
+      <label htmlFor="report-email" className="block text-[10px] font-black uppercase tracking-[0.16em]">
+        Email me this report
+      </label>
+      <p className="mt-0.5 text-[11px] leading-snug text-ink-soft">
+        Your times, splits and what to practise next. Sent once, to this address only.
+      </p>
+      <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+        <input
+          id="report-email"
+          type="email"
+          required
+          value={email}
+          onChange={(event) => {
+            setEmail(event.target.value);
+            if (stage === "error") setStage("idle");
+          }}
+          placeholder="you@example.com"
+          autoComplete="email"
+          className="min-w-0 flex-1 border-2 border-ink bg-paper px-2.5 py-2 font-mono text-[13px] text-ink outline-none placeholder:text-ink-soft/60 focus:bg-white"
+        />
+        <button
+          type="submit"
+          disabled={stage === "sending"}
+          className="brutal-button shrink-0 px-4 py-2 text-[12px] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {stage === "sending" ? "Sending..." : "Send report"}
+        </button>
+      </div>
+      {error && (
+        <p role="alert" className="mt-2 border-l-4 border-danger pl-2 text-[11px] leading-snug text-ink">
+          {error}
+        </p>
+      )}
+    </form>
+  );
+}
+
 function EndCard({ onReset, onLeave, onHome }: { onReset: () => void; onLeave: () => void; onHome: () => void }) {
   const complete = useSimulation((state) => state.assemblyConfirmed);
   const failed = useSimulation((state) => state.failed);
   const solo = useSimulation((state) => state.mode.kind === "solo");
+  const warden = useSimulation((state) => state.mode.kind === "warden");
   const routeStatus = useSimulation((state) => state.routeStatus);
   const interventionApplied = useSimulation((state) => state.interventionApplied);
   const latestMessage = useSimulation((state) => state.latestMessage);
@@ -639,7 +823,7 @@ function EndCard({ onReset, onLeave, onHome }: { onReset: () => void; onLeave: (
       <section role="dialog" aria-modal="true" aria-labelledby="end-title" className="brutal-panel w-full max-w-lg p-5 text-ink sm:p-7">
         <span className={`brutal-tag ${complete ? "bg-mint" : "bg-coral"}`}>{complete ? "Drill complete" : "Drill ended"}</span>
         <h2 id="end-title" className="mt-3 text-4xl font-black uppercase leading-[0.95] tracking-[-0.05em]">
-          {complete ? "You got out safely." : abandoned ? "A player did not return." : "Not this time."}
+          {complete ? (warden ? "They got out safely." : "You got out safely.") : abandoned ? "A player did not return." : "Not this time."}
         </h2>
         <dl className="mt-5 grid grid-cols-3 border-2 border-ink bg-paper">
           {(
@@ -664,6 +848,7 @@ function EndCard({ onReset, onLeave, onHome }: { onReset: () => void; onLeave: (
           ))}
         </div>
         {!solo && <VerificationBadge code={code} />}
+        <ReportMailer />
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
           {solo ? (
             <button
@@ -1375,7 +1560,7 @@ export default function DrillShell({ title }: { title?: string }) {
             <EvidencePanel />
           </PhoneCollapsible>
         )}
-        {view !== "evacuee" && (
+        {view === "evidence" && (
           <PhoneCollapsible label="Log">
             <Log />
           </PhoneCollapsible>
