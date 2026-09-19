@@ -31,9 +31,9 @@ import {
 } from "./narration";
 import { bucketAir, bucketSmoke, type DrillContext, type DrillEvent } from "./narration-context";
 import { runtime } from "./runtime";
-import { useSession } from "./session";
+import { resolveRoom, useSession } from "./session";
 import { useSimulation, watchedSector, VIEWS, type ViewMode } from "./store";
-import type { EvidenceStatus, RouteMessage } from "./net/types";
+import { RECONNECT_GRACE_MS, type EvidenceStatus, type RouteMessage } from "./net/types";
 
 const DrillCanvas = dynamic(() => import("./DrillCanvas"), {
   ssr: false,
@@ -499,11 +499,98 @@ function CommandDeck() {
   );
 }
 
+/**
+ * Collapses a warden panel down to a toggle on a phone.
+ *
+ * Stacked, the evidence panel and the log push the minimap and the command deck off a 400px
+ * screen entirely. On a desktop they stay exactly as they were.
+ */
+function PhoneCollapsible({ label, children }: { label: string; children: ReactNode }) {
+  const touch = useCoarsePointer();
+  const [open, setOpen] = useState(false);
+  if (!touch) return <>{children}</>;
+  return (
+    <div className="pointer-events-auto flex flex-col items-end gap-2">
+      <button
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        className="flex items-center gap-2 border-2 border-paper/30 bg-night/85 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-paper"
+      >
+        {label}
+        <span aria-hidden className="text-sun">{open ? "–" : "+"}</span>
+      </button>
+      {open && children}
+    </div>
+  );
+}
+
 /* --------------------------------------------------------------- overlays */
 
 function formatTime(seconds: number) {
   const whole = Math.max(0, Math.floor(seconds));
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+}
+
+type Verdict = { verified: boolean; reasons: string[] };
+
+/**
+ * Advisory badge on the end card.
+ *
+ * Checks the finished drill against its own recorded history. It never changes the result
+ * and never explains itself when the check could not run: if AWS is not configured, the
+ * query fails or the route is slow, this renders nothing at all rather than accusing a
+ * player of cheating because of an infrastructure problem.
+ */
+function VerificationBadge({ code }: { code: string | null }) {
+  const [verdict, setVerdict] = useState<Verdict | null>(null);
+
+  useEffect(() => {
+    if (!code) return;
+    const abort = new AbortController();
+    // a slow check is a check that did not happen; the end screen never waits on it
+    const giveUp = window.setTimeout(() => abort.abort(), 6_000);
+    fetch(`/api/verify/${code}`, { signal: abort.signal })
+      .then((response) => (response.ok ? (response.json() as Promise<Verdict>) : null))
+      .then((value) => {
+        if (value && typeof value.verified === "boolean") setVerdict(value);
+      })
+      .catch(() => {
+        /* unavailable is not a finding */
+      })
+      .finally(() => window.clearTimeout(giveUp));
+    return () => {
+      window.clearTimeout(giveUp);
+      abort.abort();
+    };
+  }, [code]);
+
+  if (!verdict) return null;
+  return (
+    <div
+      className={`mt-5 border-2 border-ink p-3 ${verdict.verified ? "bg-mint/25" : "bg-coral/25"}`}
+      role="status"
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className="inline-block h-2.5 w-2.5 border-2 border-ink"
+          style={{ background: verdict.verified ? "var(--mint)" : "var(--coral)" }}
+          aria-hidden
+        />
+        <span className="text-[11px] font-black uppercase tracking-[0.16em]">
+          {verdict.verified ? "Verified against the drill record" : "Unverified"}
+        </span>
+      </div>
+      {!verdict.verified && (
+        <ul className="mt-2 space-y-1 pl-4 text-[11px] leading-relaxed text-ink-soft">
+          {verdict.reasons.map((reason) => (
+            <li key={reason} className="list-disc">
+              {reason}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 function EndCard({ onReset, onLeave, onHome }: { onReset: () => void; onLeave: () => void; onHome: () => void }) {
@@ -517,9 +604,14 @@ function EndCard({ onReset, onLeave, onHome }: { onReset: () => void; onLeave: (
   const elapsed = useSimulation((state) => state.hazardElapsed);
   const health = useSimulation((state) => state.health);
   const reset = useSimulation((state) => state.reset);
+  const room = useSession((state) => state.room);
+  const code = useSession((state) => state.code);
+  const abandoned = resolveRoom(room)?.outcome === "participant-left";
   if (!complete && !failed) return null;
   const done = CRITICAL_SCENARIO_OBJECTS.filter((id) => progress[id]).length;
-  const coordination = failed
+  const coordination = abandoned
+    ? "A participant disconnected and did not come back before the countdown ran out, so the drill was ended."
+    : failed
     ? "The evacuee did not reach the exit before their air or health ran out."
     : latestMessage
       ? "A route message was delivered. Was it early enough to matter?"
@@ -530,7 +622,15 @@ function EndCard({ onReset, onLeave, onHome }: { onReset: () => void; onLeave: (
       ? "Decide on the alternate route earlier."
       : "Verify the evidence before sending a route message.";
   const debrief: [string, string, string][] = [
-    ["Did we get out safely?", complete ? "Yes. The evacuee left through the marked exit." : "No. The drill ended before the exit.", "var(--mint)"],
+    [
+      "Did we get out safely?",
+      complete
+        ? "Yes. The evacuee left through the marked exit."
+        : abandoned
+          ? "No. The drill ended when a participant dropped out mid-run."
+          : "No. The drill ended before the exit.",
+      "var(--mint)",
+    ],
     ["Where did coordination slip?", coordination, "var(--sun)"],
     ["What do we practise next?", practice, "var(--violet)"],
   ];
@@ -539,7 +639,7 @@ function EndCard({ onReset, onLeave, onHome }: { onReset: () => void; onLeave: (
       <section role="dialog" aria-modal="true" aria-labelledby="end-title" className="brutal-panel w-full max-w-lg p-5 text-ink sm:p-7">
         <span className={`brutal-tag ${complete ? "bg-mint" : "bg-coral"}`}>{complete ? "Drill complete" : "Drill ended"}</span>
         <h2 id="end-title" className="mt-3 text-4xl font-black uppercase leading-[0.95] tracking-[-0.05em]">
-          {complete ? "You got out safely." : "Not this time."}
+          {complete ? "You got out safely." : abandoned ? "A player did not return." : "Not this time."}
         </h2>
         <dl className="mt-5 grid grid-cols-3 border-2 border-ink bg-paper">
           {(
@@ -563,6 +663,7 @@ function EndCard({ onReset, onLeave, onHome }: { onReset: () => void; onLeave: (
             </div>
           ))}
         </div>
+        {!solo && <VerificationBadge code={code} />}
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
           {solo ? (
             <button
@@ -822,6 +923,133 @@ function requestCanvasLock() {
   }
 }
 
+/**
+ * Shown on every screen while a participant is missing.
+ *
+ * The drill is frozen through the existing `paused` flag rather than a second mechanism, so
+ * movement, interaction and the hazard clock all stop for free. The countdown is local: it
+ * starts when this client first sees the drop, which is close enough on a two-seat drill and
+ * avoids putting a deadline into the room snapshot for clients to disagree about.
+ */
+/**
+ * Nudge to turn the phone. Advisory only: play is never blocked or the orientation locked,
+ * because a player who wants to stay in portrait — or has rotation locked at the OS level —
+ * still has every control reachable, just with less of the building in view.
+ */
+function RotateHint() {
+  const touch = useCoarsePointer();
+  const briefingStatus = useSimulation((state) => state.briefingStatus);
+  const failed = useSimulation((state) => state.failed);
+  const complete = useSimulation((state) => state.assemblyConfirmed);
+  const [portrait, setPortrait] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    if (!touch) return;
+    const query = window.matchMedia("(orientation: portrait)");
+    const apply = () => setPortrait(query.matches);
+    apply();
+    query.addEventListener("change", apply);
+    return () => query.removeEventListener("change", apply);
+  }, [touch]);
+
+  if (!touch || !portrait || dismissed || briefingStatus !== "complete" || failed || complete) return null;
+
+  return (
+    <div className="safe-top pointer-events-none absolute inset-x-0 top-0 z-40 flex justify-center px-3">
+      <div className="pointer-events-auto flex items-center gap-3 border-2 border-ink bg-sun px-3 py-2 shadow-[4px_4px_0_var(--ink)]">
+        <span className="text-[11px] font-black uppercase tracking-[0.12em] text-ink">
+          Turn your phone sideways for more of the floor
+        </span>
+        <button
+          onClick={() => setDismissed(true)}
+          className="border-2 border-ink px-2 py-1 text-[10px] font-black uppercase tracking-widest text-ink"
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function WaitingForPlayer() {
+  const room = useSession((state) => state.room);
+  const setPaused = useSimulation((state) => state.setPaused);
+  const resolved = resolveRoom(room);
+  const missing =
+    resolved?.phase === "active" ? resolved.participants.find((item) => item.connected === false) : undefined;
+
+  const [remaining, setRemaining] = useState(RECONNECT_GRACE_MS);
+  const autoPaused = useRef(false);
+
+  // the room is what knows the grace period expired; the local sim drives the end card
+  const failSim = useSimulation((state) => state.fail);
+  const outcome = resolved?.outcome;
+  useEffect(() => {
+    if (outcome === "participant-left") failSim("a participant did not return");
+  }, [outcome, failSim]);
+
+  // Show a full ten seconds on the first paint rather than the previous run's zero. This is
+  // the derived-state-during-render pattern, so it stays pure: the deadline itself is read
+  // from the clock inside the effect.
+  const missingId = missing?.id ?? null;
+  const [trackedId, setTrackedId] = useState<string | null>(null);
+  if (missingId !== trackedId) {
+    setTrackedId(missingId);
+    setRemaining(RECONNECT_GRACE_MS);
+  }
+
+  useEffect(() => {
+    if (!missingId) {
+      // only lift the pause this overlay put in place, never the player's own pause menu
+      if (autoPaused.current) {
+        autoPaused.current = false;
+        setPaused(false);
+      }
+      return;
+    }
+    autoPaused.current = true;
+    setPaused(true);
+    const endsAt = Date.now() + RECONNECT_GRACE_MS;
+    const tick = window.setInterval(() => setRemaining(Math.max(0, endsAt - Date.now())), 100);
+    return () => window.clearInterval(tick);
+  }, [missingId, setPaused]);
+
+  if (!missing) return null;
+  const seconds = Math.ceil(remaining / 1000);
+
+  return (
+    <div className="pointer-events-auto absolute inset-0 z-[60] grid place-items-center overflow-y-auto bg-night/85 p-4 backdrop-blur-sm">
+      <section
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="waiting-title"
+        className="brutal-panel-dark w-full max-w-md p-5 text-center sm:p-6"
+      >
+        <span className="brutal-tag bg-danger text-paper">Connection lost</span>
+        <h2 id="waiting-title" className="mt-4 text-3xl font-black uppercase leading-none tracking-[-0.05em]">
+          Waiting for {missing.name}
+        </h2>
+        <p className="mt-3 text-sm leading-relaxed text-paper/70">
+          The drill is paused. Air and smoke are frozen until they are back.
+        </p>
+        <div className="mt-6 font-mono text-6xl font-black leading-none text-sun" aria-live="polite">
+          {seconds}
+        </div>
+        <div className="mt-3 h-2 w-full border-2 border-paper/25">
+          <div
+            className="h-full bg-sun transition-[width] duration-100 ease-linear"
+            style={{ width: `${(remaining / RECONNECT_GRACE_MS) * 100}%` }}
+          />
+        </div>
+        <p className="mt-4 text-[11px] font-bold uppercase tracking-[0.14em] text-paper/45">
+          The drill ends if they do not return
+        </p>
+      </section>
+    </div>
+  );
+}
+
 function PauseMenu({ onRestart, onLeave, onHome }: { onRestart: () => void; onLeave: () => void; onHome: () => void }) {
   const paused = useSimulation((state) => state.paused);
   const setPaused = useSimulation((state) => state.setPaused);
@@ -852,7 +1080,7 @@ function PauseMenu({ onRestart, onLeave, onHome }: { onRestart: () => void; onLe
         <div className="flex items-center justify-between">
           <span className="brutal-tag bg-sun text-ink">Paused</span>
           <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-paper/55">
-            <Key small>Esc</Key> to resume
+            {touch ? "Tap resume to continue" : <><Key small>Esc</Key> to resume</>}
           </span>
         </div>
         <h2 id="pause-title" className="mt-3 text-3xl font-black uppercase tracking-[-0.05em]">
@@ -1069,10 +1297,15 @@ export default function DrillShell({ title }: { title?: string }) {
       <Briefing />
 
       {/* top left: brand, location, objectives */}
-      <div className="pointer-events-none absolute left-3 top-3 z-10 flex flex-col items-start gap-3 sm:left-4 sm:top-4">
+      <div className="safe-top pointer-events-none absolute left-3 top-0 z-10 flex max-w-[58vw] flex-col items-start gap-3 sm:left-4 sm:max-w-none">
         <LocationHeader tag={tag} />
         {evacueeHud ? (
-          <ObjectivesPanel />
+          // 19.5rem of checklist collides with the minimap on a 360px screen, so on a phone
+          // the list folds away and the objective the player is actually on is carried by
+          // the prompt and the narration instead
+          <PhoneCollapsible label="Objectives">
+            <ObjectivesPanel />
+          </PhoneCollapsible>
         ) : (
           <div className="hud-panel max-w-xs px-3 py-2 text-[11px] leading-snug text-paper/75">
             {warden
@@ -1085,7 +1318,7 @@ export default function DrillShell({ title }: { title?: string }) {
       </div>
 
       {/* top right: status, menu, map, warden panels */}
-      <div className="pointer-events-none absolute right-3 top-3 z-10 flex max-h-[calc(100%-1.5rem)] max-w-[62vw] flex-col items-end gap-2 overflow-y-auto sm:right-4 sm:top-4 sm:max-w-none">
+      <div className="safe-top pointer-events-none absolute right-3 top-0 z-10 flex max-h-[calc(100%-1.5rem)] max-w-[52vw] flex-col items-end gap-2 overflow-y-auto sm:right-4 sm:max-w-none">
         <div className="pointer-events-auto flex flex-wrap items-center justify-end gap-2">
           <ConnectionBadge />
           {warden && (
@@ -1116,8 +1349,16 @@ export default function DrillShell({ title }: { title?: string }) {
           </button>
         </div>
         <Minimap />
-        {view !== "evacuee" && <EvidencePanel />}
-        {view !== "evacuee" && <Log />}
+        {view !== "evacuee" && (
+          <PhoneCollapsible label="Evidence">
+            <EvidencePanel />
+          </PhoneCollapsible>
+        )}
+        {view !== "evacuee" && (
+          <PhoneCollapsible label="Log">
+            <Log />
+          </PhoneCollapsible>
+        )}
       </div>
 
       {/* alerts */}
@@ -1150,7 +1391,7 @@ export default function DrillShell({ title }: { title?: string }) {
 
       {/* bottom centre: narration, interaction prompt, controls */}
       {!warden && (
-        <div className={`pointer-events-none absolute inset-x-0 z-10 flex flex-col items-center gap-2 px-3 ${showStick ? "bottom-[220px]" : "bottom-3 sm:bottom-4"} ${view === "evacuee" ? "" : "hidden"}`}>
+        <div className={`pointer-events-none absolute inset-x-0 z-10 flex flex-col items-center gap-2 px-3 ${showStick ? "above-dock" : "bottom-3 sm:bottom-4"} ${view === "evacuee" ? "" : "hidden"}`}>
           <NarrationCaption />
           {!showStick && <PromptBar />}
           {!touch && <div className="hidden lg:block"><ControlsHint /></div>}
@@ -1164,6 +1405,8 @@ export default function DrillShell({ title }: { title?: string }) {
       )}
       {showStick && <TouchControls />}
       <Onboarding />
+      <RotateHint />
+      <WaitingForPlayer />
       <PauseMenu onRestart={restart} onLeave={leaveDrill} onHome={goHome} />
       <EndCard onReset={restart} onLeave={leaveDrill} onHome={goHome} />
     </div>
