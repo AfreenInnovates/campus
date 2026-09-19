@@ -13,6 +13,7 @@ import Systems from "./components/Systems";
 import NetSync from "./components/NetSync";
 import ViewRig from "./components/ViewRig";
 import { useIsSimulationOwner } from "./store";
+import { useCoarsePointer } from "./useCoarsePointer";
 
 const MAP = [
   { name: "forward", keys: ["ArrowUp", "KeyW"] },
@@ -52,14 +53,18 @@ function useSpaceForJumpOnly() {
 
 export default function DrillCanvas() {
   const ownsSimulation = useIsSimulationOwner();
+  const touch = useCoarsePointer();
   useSpaceForJumpOnly();
 
+  // A phone renders the same scene into a much denser display with a fraction of the GPU.
+  // Shadow maps are the single most expensive thing here and the least missed at that size,
+  // and capping DPR at 1 roughly halves the pixels on a 2x screen. Desktop is untouched.
   return (
     <KeyboardControls map={MAP}>
       <Canvas
-        shadows="soft"
-        dpr={[1, 1.5]}
-        gl={{ antialias: true, powerPreference: "high-performance" }}
+        shadows={touch ? false : "soft"}
+        dpr={touch ? 1 : [1, 1.5]}
+        gl={{ antialias: !touch, powerPreference: "high-performance" }}
         style={{ position: "absolute", inset: 0 }}
       >
         <Suspense fallback={null}>
