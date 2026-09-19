@@ -165,7 +165,9 @@ function LocalEvacuee() {
     const throttle = Math.min(1, move.length());
     if (moving) move.normalize();
 
-    const speed = (down.sprint ? RUN : WALK) * (moving ? throttle : 0);
+    // keyboard and thumb feed the same flag, so sprinting behaves identically on both
+    const sprinting = down.sprint || runtime.touchSprint;
+    const speed = (sprinting ? RUN : WALK) * (moving ? throttle : 0);
     const velocity = rb.linvel();
     const grounded = t.y <= GROUNDED_Y;
     const wantsJump = movementEnabled && performance.now() - runtime.jumpAt < JUMP_BUFFER_MS;
@@ -183,7 +185,7 @@ function LocalEvacuee() {
     if (ownCamera) runtime.evacueeYaw = Math.atan2(direction.x, direction.z);
     else if (moving) runtime.evacueeYaw = Math.atan2(move.x, move.z);
     if (visual.current) visual.current.rotation.y = runtime.evacueeYaw;
-    bobT.current += moving ? dt * (down.sprint ? 12 : 8) : 0;
+    bobT.current += moving ? dt * (sprinting ? 12 : 8) : 0;
 
     if (eyes) {
       eyeTarget.current.set(
