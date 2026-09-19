@@ -318,6 +318,96 @@ export class EventsNet implements NetClient {
     if (message?.to === this.myId) this.emit({ type: "warden-state", state: message.state });
   }
 
+  /* --------------------------------------------------------------- presence */
+
+  private startPresence() {
+    this.stopPresence();
+    const ping = () => {
+      if (!this.code || !this.myId) return;
+      // volatile: a ping that could not go out is worthless a moment later
+      this.socket?.publish(`/live/${this.code}/presence`, [{ from: this.myId, at: Date.now() }], true);
+    };
+    ping();
+    this.pingTimer = setInterval(ping, PRESENCE_PING_MS);
+    this.sweepTimer = setInterval(() => this.sweepPresence(), PRESENCE_SWEEP_MS);
+  }
+
+  private stopPresence() {
+    if (this.pingTimer) clearInterval(this.pingTimer);
+    if (this.sweepTimer) clearInterval(this.sweepTimer);
+    if (this.graceTimer) clearTimeout(this.graceTimer);
+    this.pingTimer = null;
+    this.sweepTimer = null;
+    this.graceTimer = null;
+  }
+
+  private receivePresence(message: PresenceMessage) {
+    if (!message || typeof message.from !== "string" || message.from === this.myId) return;
+    this.lastSeen.set(message.from, Date.now());
+    // a ping is proof of life, so a brief network drop recovers without a rejoin
+    const room = resolveRoom(this.room);
+    if (room?.participants.some((item) => item.id === message.from && item.connected === false)) {
+      this.setConnected(message.from, true);
+    }
+  }
+
+  /**
+   * Marks anyone who has gone quiet. This is what catches a closed tab, since a closed tab
+   * sends no `leave`. Participants are only judged once they have pinged at least once, so a
+   * client that is still finishing its own connect is never mistaken for a dropout.
+   */
+  private sweepPresence() {
+    const room = resolveRoom(this.room);
+    if (!room || room.phase !== "active") return;
+    const now = Date.now();
+    for (const participant of room.participants) {
+      if (participant.id === this.myId) continue;
+      const seen = this.lastSeen.get(participant.id);
+      if (seen === undefined) continue;
+      if (now - seen > PRESENCE_TIMEOUT_MS && participant.connected !== false) {
+        this.setConnected(participant.id, false);
+      }
+    }
+  }
+
+  /**
+   * Flips a participant's presence and runs the grace period around it.
+   *
+   * Known limitation: the evacuee browser owns the drill state in memory, so if the
+   * evacuee's tab is actually closed that state is gone and rejoining restarts the run. The
+   * grace period covers a browser that is still open — a refresh, a brief network drop — and
+   * the warden reconnecting. Surviving a closed evacuee tab would need the drill state
+   * persisted somewhere outside it, which is out of scope here.
+   */
+  private setConnected(id: string, connected: boolean) {
+    const room = resolveRoom(this.room);
+    if (!room || !room.participants.some((item) => item.id === id)) return;
+    const participants = room.participants.map((item) => (item.id === id ? { ...item, connected } : item));
+    this.applyRoom({ ...room, participants });
+
+    if (this.graceTimer) clearTimeout(this.graceTimer);
+    this.graceTimer = null;
+    if (connected) return;
+
+    this.graceTimer = setTimeout(() => {
+      this.graceTimer = null;
+      const current = resolveRoom(this.room);
+      const stillGone = current?.participants.find((item) => item.id === id)?.connected === false;
+      if (!current || current.phase !== "active" || !stillGone) return;
+      this.applyRoom({ ...current, phase: "failed", outcome: "participant-left" });
+    }, RECONNECT_GRACE_MS);
+  }
+
+  /** Commit when this browser owns the lobby, otherwise apply locally so the UI still reacts. */
+  private applyRoom(next: DrillRoom) {
+    if (this.lobbyOwner) {
+      this.commitRoom(next);
+      return;
+    }
+    this.room = next;
+    this.emit({ type: "room", room: next });
+  }
+
   /** Resolve with the first message `match` accepts, re-sending `kick` until then; null on timeout. */
   private waitFor<T>(match: (message: GameMessage) => T | undefined, ms: number, kick: () => void) {
     return new Promise<T | null>((resolve) => {
@@ -388,19 +478,19 @@ export class EventsNet implements NetClient {
   private removeParticipant(id: string) {
     const room = resolveRoom(this.room);
     if (!room || !room.participants.some((item) => item.id === id)) return;
+    // Mid-drill a `leave` is the fast path into the grace period rather than an instant
+    // failure: the seat is held open so a refreshed browser can take it back.
+    if (room.phase === "active") {
+      this.lastSeen.delete(id);
+      this.setConnected(id, false);
+      return;
+    }
     const participants = room.participants.filter((item) => item.id !== id);
     const next: DrillRoom =
-      room.phase === "active"
-        ? { ...room, participants, phase: "failed", outcome: "participant-left" }
-        : room.phase === "preparing"
-          ? { ...room, participants, phase: "lobby", startsAt: null }
-          : { ...room, participants };
-    if (this.lobbyOwner) {
-      this.commitRoom(next);
-    } else {
-      this.room = next;
-      this.emit({ type: "room", room: next });
-    }
+      room.phase === "preparing"
+        ? { ...room, participants, phase: "lobby", startsAt: null }
+        : { ...room, participants };
+    this.applyRoom(next);
   }
 
   private scheduleActivation() {
