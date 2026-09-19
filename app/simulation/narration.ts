@@ -259,45 +259,48 @@ export function speakNarration(cue: PlayableCue, onEnd: () => void) {
     if (current()) onEnd();
   };
 
-  const context = getAudioContext();
-  if (!context || !readVoiceEnabled() || (!cue.ids.length && !cue.live)) {
-    void loadManifest().then(() => current() && speakSilently(cue, finish));
-    return;
-  }
+  void (async () => {
+    const silently = async () => {
+      await loadManifest();
+      if (current()) speakSilently(cue, finish);
+    };
 
-  // live first: it is the line written for this exact situation. The rendered clip is the
-  // same guidance without the conditions, so falling back to it is a downgrade, not a break.
-  const sources = cue.live
-    ? requestLive(cue.live).then((buffer) => (buffer ? [buffer] : null))
-    : Promise.resolve(null);
+    const context = getAudioContext();
+    if (!context || !readVoiceEnabled() || (!cue.ids.length && !cue.live)) return silently();
 
-  void sources
-    .then((liveBuffers) => liveBuffers ?? (cue.ids.length ? Promise.all(cue.ids.map(loadClip)) : null))
-    .then((buffers) => {
-      if (!current()) return;
-      if (!buffers) {
-        speakSilently(cue, finish);
-        return;
-      }
-      const ready = buffers.filter((buffer): buffer is AudioBuffer => buffer !== null);
-      if (!ready.length || ready.length !== buffers.length) {
-        speakSilently(cue, finish);
-        return;
-      }
+    // A suspended context has a frozen clock, so anything scheduled against it is not
+    // dropped — it waits, then fires the moment some later gesture resumes the context,
+    // which sounds like the narrator talking at random. Wait for the resume to settle
+    // rather than reading `state` straight after asking for it: on a cold page the flip is
+    // not synchronous, and checking too early would silence the first line of the briefing.
+    if (context.state !== "running") await context.resume().catch(() => undefined);
+    if (!current()) return;
+    if (context.state !== "running") return silently();
 
-      // schedule the whole cue on the audio clock in one pass: the gap between a "done"
-      // line and its "next" instruction is then sample-accurate rather than a setTimeout
-      let at = context.currentTime + 0.04;
-      ready.forEach((buffer, index) => {
-        const source = context.createBufferSource();
-        source.buffer = buffer;
-        source.connect(context.destination);
-        source.start(at);
-        at += buffer.duration + (index < ready.length - 1 ? CLIP_GAP : 0);
-        if (index === ready.length - 1) source.onended = finish;
-        playing.push(source);
-      });
+    // Live first: it is the line written for this exact situation. The rendered clip is the
+    // same guidance without the conditions, so falling back to it is a downgrade, not a break.
+    const live = cue.live ? await requestLive(cue.live) : null;
+    if (!current()) return;
+
+    const buffers = live
+      ? [live]
+      : ((await Promise.all(cue.ids.map(loadClip))).filter((buffer): buffer is AudioBuffer => buffer !== null));
+    if (!current()) return;
+    if (!buffers.length || buffers.length !== (live ? 1 : cue.ids.length)) return silently();
+
+    // Schedule the whole cue on the audio clock in one pass: the gap between a "done" line
+    // and its "next" instruction is then sample-accurate rather than a setTimeout.
+    let at = context.currentTime + 0.04;
+    buffers.forEach((buffer, index) => {
+      const source = context.createBufferSource();
+      source.buffer = buffer;
+      source.connect(context.destination);
+      source.start(at);
+      at += buffer.duration + (index < buffers.length - 1 ? CLIP_GAP : 0);
+      if (index === buffers.length - 1) source.onended = finish;
+      playing.push(source);
     });
+  })();
 }
 
 export function stopNarration() {
