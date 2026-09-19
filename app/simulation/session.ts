@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import type { CommandCode } from "./commands";
 import { createNet } from "./net";
+import { setProgressPublisher } from "./store";
 import { resolveRoom } from "./net/roles";
 import {
   newId,
@@ -100,6 +101,9 @@ export const useSession = create<SessionState>()((set, get) => {
 
       set({ net, myId, code, status: "connecting", startError: null });
 
+      // only a joined room records progress; solo practice leaves this unset and publishes nothing
+      setProgressPublisher((step, elapsed) => net.publishProgress(step, elapsed));
+
       unsubscribe = net.onMessage((event: NetEvent) => {
         switch (event.type) {
           case "room":
@@ -167,6 +171,7 @@ export const useSession = create<SessionState>()((set, get) => {
     },
 
     disconnect: () => {
+      setProgressPublisher(null);
       unsubscribe?.();
       unsubscribe = null;
       get().net?.disconnect();

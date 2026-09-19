@@ -68,6 +68,22 @@ export const VIEWS: {
 
 let logSeq = 0;
 
+/**
+ * Where completed objectives are reported for the drill record.
+ *
+ * `eventsNet.ts` already imports this module, so importing the session back here would
+ * close an import cycle. The session registers a publisher when it joins a room and clears
+ * it on disconnect, which also gives solo practice the behaviour it needs for free: with no
+ * publisher registered, nothing is sent and no AWS configuration is required.
+ */
+type ProgressPublisher = (step: ScenarioObjectId, elapsed: number) => void;
+let progressPublisher: ProgressPublisher | null = null;
+
+export const setProgressPublisher = (publish: ProgressPublisher | null) => {
+  progressPublisher = publish;
+};
+
+
 export interface SimulationState {
   mode: SimulationMode;
   view: ViewMode;
@@ -195,6 +211,7 @@ export const useSimulation = create<SimulationState>()((set, get) => ({
       set((current) => ({
         scenarioProgress: { ...current.scenarioProgress, [id]: true },
       }));
+      progressPublisher?.(id, get().hazardElapsed);
       get().confirmAssembly();
       return;
     }
@@ -221,6 +238,7 @@ export const useSimulation = create<SimulationState>()((set, get) => ({
       get().push("Emergency guide decoded. The exit signs match the safe route.", "good");
     }
     set(changes);
+    progressPublisher?.(id, get().hazardElapsed);
     if (scenarioReady(progress)) get().push("All critical steps complete. Return to the marked exit.", "good");
     else if (object.kind === "clue") get().push(`Next: ${nextScenarioObjective(progress)}.`, "info");
   },

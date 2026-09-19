@@ -1,4 +1,4 @@
-import type { EquipmentId, RoomId, ScenarioProgress } from "../level";
+import type { EquipmentId, RoomId, ScenarioObjectId, ScenarioProgress } from "../level";
 import type { CommandCode } from "../commands";
 
 export type Role = "evacuee" | "warden";
@@ -14,6 +14,17 @@ export type Phase =
 export const WARDEN_SECTORS: RoomId[] = ["sec"];
 
 export const COUNTDOWN_MS = 10_000;
+
+/* -- presence ------------------------------------------------------------
+   A closed tab sends nothing, so absence has to be inferred from silence. Every client
+   pings on /live/{code}/presence, which is broadcast only and never written to DynamoDB. */
+
+/** How often each client announces itself. */
+export const PRESENCE_PING_MS = 2_000;
+/** Silence longer than this counts as gone: two missed pings plus slack. */
+export const PRESENCE_TIMEOUT_MS = 5_000;
+/** How long a dropped participant has to come back before the drill ends. */
+export const RECONNECT_GRACE_MS = 10_000;
 
 export type RoomResult =
   | "assembly-confirmed"
@@ -194,6 +205,8 @@ export interface NetClient {
   leave(code: string, playerId: string): void;
   start(code: string, playerId: string): Promise<StartResult>;
   send(intent: ClientIntent): void;
+  /** Records a completed objective in the drill history. Fire and forget; drives no UI. */
+  publishProgress(step: ScenarioObjectId, elapsed: number): void;
   onMessage(cb: (event: NetEvent) => void): () => void;
 }
 

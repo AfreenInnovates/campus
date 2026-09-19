@@ -1,12 +1,15 @@
 "use client";
 
-import { MARKERS, type MarkerDef, type RoomId } from "../level";
+import { MARKERS, type MarkerDef, type RoomId, type ScenarioObjectId } from "../level";
 import { getSectorSmoke, VENTILATION_SMOKE_FACTOR } from "../smoke";
 import { useSimulation } from "../store";
 import { EventsSocket } from "./events";
 import { assignRoles, resolveRoom } from "./roles";
 import {
   COUNTDOWN_MS,
+  PRESENCE_PING_MS,
+  PRESENCE_TIMEOUT_MS,
+  RECONNECT_GRACE_MS,
   WARDEN_SECTORS,
   type ClientIntent,
   type CommandAcknowledgement,
@@ -27,6 +30,7 @@ const CONNECT_TIMEOUT_MS = 8_000;
 const PROBE_MS = 1_200;
 const JOIN_TIMEOUT_MS = 6_000;
 const SYNC_RETRY_MS = 1_500;
+const PRESENCE_SWEEP_MS = 1_000;
 
 type WardenIntent = Exclude<ClientIntent, { type: "evacuee-state" }>;
 type WardenCommand = Extract<ClientIntent, { type: "warden-command" }>;
@@ -37,11 +41,16 @@ type GameMessage =
   | { t: "room"; from: string; room: DrillRoom }
   | { t: "reject"; from: string; to: string; reason: JoinFailure }
   | { t: "leave"; from: string }
+  /** Written to DynamoDB for the debrief and the end-of-drill check. Drives no UI. */
+  | { t: "progress"; from: string; step: ScenarioObjectId; at: number; elapsed: number }
   | { t: "intent"; from: string; intent: WardenIntent }
   | { t: "ack"; from: string; to: string; acknowledgement: CommandAcknowledgement };
 
 /** /live/{code}/warden: role-scoped snapshots, broadcast only. */
 type LiveMessage = { to: string; state: WardenState };
+
+/** /live/{code}/presence: "still here". Broadcast only, deliberately never stored. */
+type PresenceMessage = { from: string; at: number };
 
 /** Drill state held by the evacuee browser once the drill is active. */
 interface DrillAuthority {
@@ -148,6 +157,11 @@ export class EventsNet implements NetClient {
   private room: DrillRoom | null = null;
   private lobbyOwner = false;
   private authority: DrillAuthority | null = null;
+  private pingTimer: ReturnType<typeof setInterval> | null = null;
+  private sweepTimer: ReturnType<typeof setInterval> | null = null;
+  private graceTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Last presence ping per participant id. */
+  private readonly lastSeen = new Map<string, number>();
 
   async connect(code: string) {
     this.code = code;
@@ -155,13 +169,23 @@ export class EventsNet implements NetClient {
     this.socket = socket;
     const game = socket.subscribe(`/game/${code}/*`, (payload) => this.receive(payload as GameMessage));
     const live = socket.subscribe(`/live/${code}/warden`, (payload) => this.receiveLive(payload as LiveMessage));
-    this.unsubscribe = [game.close, live.close];
-    await withTimeout(Promise.all([game.ready, live.ready]), CONNECT_TIMEOUT_MS, "realtime connection timed out");
+    const presence = socket.subscribe(`/live/${code}/presence`, (payload) =>
+      this.receivePresence(payload as PresenceMessage),
+    );
+    this.unsubscribe = [game.close, live.close, presence.close];
+    await withTimeout(
+      Promise.all([game.ready, live.ready, presence.ready]),
+      CONNECT_TIMEOUT_MS,
+      "realtime connection timed out",
+    );
+    this.startPresence();
   }
 
   disconnect() {
     if (this.activationTimer) clearTimeout(this.activationTimer);
     this.activationTimer = null;
+    this.stopPresence();
+    this.lastSeen.clear();
     for (const stop of this.unsubscribe) stop();
     this.unsubscribe = [];
     this.socket?.close();
@@ -240,6 +264,11 @@ export class EventsNet implements NetClient {
     if (role === "warden") this.publish({ t: "intent", from: this.myId, intent });
   }
 
+  publishProgress(step: ScenarioObjectId, elapsed: number) {
+    if (!this.code || !this.myId) return;
+    this.publish({ t: "progress", from: this.myId, step, at: Date.now(), elapsed });
+  }
+
   onMessage(callback: (event: NetEvent) => void) {
     this.listeners.add(callback);
     return () => this.listeners.delete(callback);
@@ -270,6 +299,9 @@ export class EventsNet implements NetClient {
         break;
       case "leave":
         this.removeParticipant(message.from);
+        break;
+      case "progress":
+        // recorded by the namespace handler on the way through; nothing to apply locally
         break;
       case "intent":
         this.authorize(message.from, message.intent);
