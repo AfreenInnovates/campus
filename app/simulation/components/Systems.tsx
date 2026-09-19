@@ -51,9 +51,13 @@ export default function Systems() {
 
     if (sim.paused) {
       runtime.useTarget = null;
-      // solo practice stops the clock; a shared drill keeps running for the warden
-      if (sim.mode.kind === "solo" && runtime.drillStartedAt > 0) runtime.drillStartedAt += rawDt * 1000;
-      if (sim.mode.kind === "solo") return;
+      runtime.touchMove.x = 0;
+      runtime.touchMove.y = 0;
+      // The hazard clock is derived from wall time, so it is held by pushing the start
+      // forward. This applies in multiplayer too: a drill waiting on a dropped player must
+      // not keep draining air, or the grace period would quietly cost the run.
+      if (runtime.drillStartedAt > 0) runtime.drillStartedAt += rawDt * 1000;
+      return;
     }
 
     const room = useSession.getState().room;
