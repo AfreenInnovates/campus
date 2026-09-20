@@ -38,7 +38,7 @@ export default function RoomsPage() {
   };
 
   return (
-    <main className="brutal-grid relative min-h-0 flex-1 overflow-y-auto text-ink">
+    <main className="ce-entry-shell brutal-grid relative min-h-0 flex-1 overflow-y-auto text-ink">
       <div className="mx-auto flex min-h-full max-w-5xl flex-col px-5 py-5 sm:px-8 sm:py-8">
         <nav className="flex items-center justify-between border-b-2 border-ink pb-4">
           <Link

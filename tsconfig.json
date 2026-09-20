@@ -39,6 +39,21 @@
   ],
   "exclude": [
     "node_modules",
-    "infra"
+    "infra",
+    "app/simulation/DrillCanvas.tsx",
+    "app/simulation/textures.ts",
+    "app/simulation/components/Building.tsx",
+    "app/simulation/components/Decor.tsx",
+    "app/simulation/components/Evacuee.tsx",
+    "app/simulation/components/Exterior.tsx",
+    "app/simulation/components/Furniture.tsx",
+    "app/simulation/components/Interactables.tsx",
+    "app/simulation/components/Markers.tsx",
+    "app/simulation/components/Minimap.tsx",
+    "app/simulation/components/NetSync.tsx",
+    "app/simulation/components/Rooms.tsx",
+    "app/simulation/components/Student.tsx",
+    "app/simulation/components/Systems.tsx",
+    "app/simulation/components/ViewRig.tsx"
   ]
 }

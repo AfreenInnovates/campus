@@ -1,17 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { pressJump, pressUse } from "../controls";
+import { pressUse } from "../controls";
 import { runtime } from "../runtime";
 import { useSimulation } from "../store";
 
 /**
- * Phone controls for the evacuee: a stick on the left thumb, look on the right.
+ * Phone controls for the evacuee: a movement stick and one contextual action button.
  *
- * Both halves write straight into `runtime`, which is where the simulation
- * already reads input from - nothing here re-renders React per frame. Each
- * surface tracks its own pointer id, so a thumb on the stick and a thumb on the
- * look pad do not steal each other's moves.
+ * The stick writes straight into `runtime`, which is where the simulation reads
+ * input from. Nothing here re-renders React per frame.
  */
 
 const STICK_RADIUS = 56;
@@ -94,17 +92,17 @@ function Stick() {
     <div
       ref={base}
       aria-label="Move"
-      className="pointer-events-auto relative grid h-[132px] w-[132px] touch-none place-items-center rounded-full border-2 border-white/25 bg-black/35 backdrop-blur-sm"
+      className="ce-touch-stick pointer-events-auto relative grid h-[132px] w-[132px] touch-none place-items-center border-2 border-white/25"
     >
-      <div className="absolute inset-3 rounded-full border border-white/10" />
+       <div className="absolute inset-3 border border-white/10" />
       <div
         ref={ring}
         aria-hidden
-        className="pointer-events-none absolute inset-0 rounded-full border-2 border-sun opacity-0 transition-opacity duration-150"
+         className="pointer-events-none absolute inset-0 border-2 border-sun opacity-0 transition-opacity duration-150"
       />
       <div
         ref={knob}
-        className="h-14 w-14 rounded-full border-2 border-sun bg-sun/25"
+         className="h-14 w-14 border-2 border-sun bg-sun/25"
       />
       <span className="pointer-events-none absolute -top-5 text-[9px] font-black uppercase tracking-[0.18em] text-white/45">
         move
@@ -113,54 +111,6 @@ function Stick() {
         push to run
       </span>
     </div>
-  );
-}
-
-/** Everything not under a control is a look surface. */
-function LookPad() {
-  const pad = useRef<HTMLDivElement>(null);
-  const pointer = useRef<number | null>(null);
-  const last = useRef({ x: 0, y: 0 });
-
-  useEffect(() => {
-    const el = pad.current;
-    if (!el) return;
-
-    const start = (e: PointerEvent) => {
-      if (pointer.current !== null) return;
-      pointer.current = e.pointerId;
-      last.current = { x: e.clientX, y: e.clientY };
-      el.setPointerCapture(e.pointerId);
-    };
-    const move = (e: PointerEvent) => {
-      if (pointer.current !== e.pointerId) return;
-      runtime.touchLook.dx += e.clientX - last.current.x;
-      runtime.touchLook.dy += e.clientY - last.current.y;
-      last.current = { x: e.clientX, y: e.clientY };
-    };
-    const end = (e: PointerEvent) => {
-      if (pointer.current !== e.pointerId) return;
-      pointer.current = null;
-    };
-
-    el.addEventListener("pointerdown", start);
-    el.addEventListener("pointermove", move);
-    el.addEventListener("pointerup", end);
-    el.addEventListener("pointercancel", end);
-    return () => {
-      el.removeEventListener("pointerdown", start);
-      el.removeEventListener("pointermove", move);
-      el.removeEventListener("pointerup", end);
-      el.removeEventListener("pointercancel", end);
-    };
-  }, []);
-
-  return (
-    <div
-      ref={pad}
-      aria-label="Look around"
-      className="pointer-events-auto absolute inset-0 touch-none"
-    />
   );
 }
 
@@ -181,7 +131,7 @@ function ActionButton({
         e.preventDefault();
         onPress();
       }}
-      className="pointer-events-auto grid h-[74px] w-[74px] touch-none place-items-center rounded-full border-2 bg-black/45 backdrop-blur-sm active:scale-95"
+       className="ce-touch-action pointer-events-auto grid h-[74px] w-[74px] touch-none place-items-center border-2 active:translate-x-1 active:translate-y-1"
       style={{ borderColor: color }}
     >
       <span
@@ -207,8 +157,6 @@ export default function TouchControls() {
   const assemblyConfirmed = useSimulation((s) => s.assemblyConfirmed);
   const briefingStatus = useSimulation((s) => s.briefingStatus);
   const paused = useSimulation((s) => s.paused);
-  const cameraMode = useSimulation((s) => s.cameraMode);
-  const toggleCameraMode = useSimulation((s) => s.toggleCameraMode);
   // only label the interact button with what it would actually do
   const [action, setAction] = useState<string | null>(null);
 
@@ -247,16 +195,12 @@ export default function TouchControls() {
   useEffect(() => () => observer.current?.disconnect(), []);
 
   if (briefingStatus !== "complete" || paused || air <= 0 || health <= 0 || failed || assemblyConfirmed) return null;
-  const assemblyHere = action === "assembly";
-
   return (
     <div className="pointer-events-none absolute inset-0 z-20 select-none">
-      <LookPad />
-
       {/* the prompt sits above the thumbs where it can be read mid-move */}
       {prompt && (
         <div className="above-dock pointer-events-none absolute inset-x-0 flex justify-center px-4">
-          <div className="border-2 border-ink bg-paper px-3 py-1.5 text-center text-[12px] font-bold text-ink shadow-[3px_3px_0_var(--ink)]">
+          <div className="ce-context-prompt border-2 border-ink px-3 py-1.5 text-center text-[12px] font-bold text-ink">
             {prompt}
           </div>
         </div>
@@ -268,22 +212,10 @@ export default function TouchControls() {
 
         <div className="flex flex-col items-end gap-3">
           <ActionButton
-            label="CAM"
-            hint={cameraMode === "third" ? "first" : "third"}
-            color="#c9b8ff"
-            onPress={toggleCameraMode}
-          />
-          <ActionButton
             label="E"
             hint="use"
             color={action === "intervention" ? "#7b5cff" : action === "scenario" ? "#ffc44d" : "#9a8fa3"}
             onPress={pressUse}
-          />
-          <ActionButton
-            label={assemblyHere ? "READY" : "JUMP"}
-            hint={assemblyHere ? "assembly" : undefined}
-            color={assemblyHere ? "#2fd18f" : "#ffc44d"}
-            onPress={pressJump}
           />
         </div>
       </div>

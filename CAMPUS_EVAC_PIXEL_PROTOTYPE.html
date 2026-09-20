@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CampusEvac Pixel Tactical Prototype</title>
+    <style>
+      /* VISUAL HIERARCHY
+         1. Primary: real CampusEvac top-down world and current evacuee marker.
+         2. Secondary: highlighted route and next-action dialogue.
+         3. Tertiary: objectives, route state, connection, and room metadata.
+         4. Ambient: tile grid, hard frame, room labels, and restrained scanlines.
+      */
+      :root {
+        --void: #0b1830;
+        --ink: #13213c;
+        --frame: #2d6190;
+        --frame-hi: #8dc7e6;
+        --screen: #dceaf1;
+        --panel: #edf5f7;
+        --paper: #f7fbfd;
+        --floor: #cbd8df;
+        --floor-dark: #9fb3bf;
+        --wall: #536d80;
+        --blue: #2871bd;
+        --cyan: #38a9df;
+        --safe: #159b60;
+        --safe-hi: #31c879;
+        --warning: #d49a36;
+        --danger: #c54243;
+        --muted: #7890a5;
+        --tile: 16px;
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; }
+      body {
+        min-width: 320px;
+        background: var(--void);
+        color: var(--ink);
+        font-family: "Courier New", ui-monospace, monospace;
+      }
+
+      .shell {
+        width: min(1440px, 100vw);
+        min-height: 900px;
+        margin: 0 auto;
+        padding: 16px;
+        background: #173457;
+        box-shadow: inset 0 0 0 2px #071126, inset 0 0 0 4px var(--frame-hi);
+      }
+
+      .topbar, .map-frame, .rail-panel, .dialogue {
+        border: 2px solid var(--frame);
+        box-shadow: 4px 4px 0 var(--ink), inset 1px 1px 0 var(--frame-hi);
+      }
+
+      .topbar {
+        min-height: 56px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 8px 12px;
+        color: var(--paper);
+        background: var(--ink);
+      }
+
+      .brand { font-size: clamp(18px, 2vw, 26px); font-weight: 900; letter-spacing: -0.08em; }
+      .brand span { color: #f2bd43; }
+      .top-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; font-size: 11px; font-weight: 900; }
+      .badge { border: 2px solid currentColor; padding: 5px 8px; background: #102345; letter-spacing: .08em; }
+      .badge.live { color: var(--safe-hi); }
+      .badge.mode { color: #f2bd43; }
+
+      .workspace {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 312px;
+        gap: 16px;
+        margin-top: 16px;
+      }
+
+      .map-frame { min-width: 0; background: var(--screen); }
+      .map-title, .panel-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 40px;
+        padding: 8px 12px;
+        color: var(--paper);
+        background: #1e4a73;
+        font-size: 12px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+      }
+      .map-title small { color: #b9d8e9; font-size: 10px; }
+
+      .map {
+        position: relative;
+        min-height: 640px;
+        overflow: hidden;
+        background-color: var(--floor);
+        background-image:
+          linear-gradient(rgba(83, 109, 128, .12) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(83, 109, 128, .12) 1px, transparent 1px),
+          linear-gradient(135deg, rgba(255,255,255,.16) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.16) 75%);
+        background-size: var(--tile) var(--tile), var(--tile) var(--tile), 8px 8px;
+      }
+
+      .room {
+        position: absolute;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding-top: 12px;
+        border: 2px solid var(--wall);
+        background-color: rgba(237,245,247,.5);
+        background-image: linear-gradient(45deg, rgba(120,144,165,.13) 25%, transparent 25%, transparent 75%, rgba(120,144,165,.13) 75%);
+        background-size: 8px 8px;
+        color: #284764;
+        font-size: 11px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+      }
+      .room strong { background: rgba(247,251,253,.86); padding: 3px 5px; border: 1px solid var(--wall); }
+      .entry { left: 40%; top: 75%; width: 20%; height: 16%; background-color: #d6c79f; }
+      .lobby { left: 35%; top: 35%; width: 30%; height: 40%; }
+      .science { left: 7%; top: 35%; width: 28%; height: 40%; background-color: #b8d1df; }
+      .academic { left: 65%; top: 35%; width: 28%; height: 40%; background-color: #d6d0b7; }
+      .outside { left: 29%; top: 91%; width: 42%; height: 9%; background-color: #a7c98b; border-color: #517b4e; }
+      .passage-west { left: 30%; top: 47%; width: 5%; height: 12%; background-color: #b8d1df; }
+      .passage-east { left: 65%; top: 47%; width: 5%; height: 12%; background-color: #d9c98f; }
+
+      .wall { position: absolute; background: var(--wall); box-shadow: inset 0 1px 0 #a7bfcc; }
+      .wall.north { left: 7%; top: 34%; width: 86%; height: 6px; }
+      .wall.south { left: 7%; top: 74%; width: 86%; height: 6px; }
+      .wall.west { left: 7%; top: 34%; width: 6px; height: 41%; }
+      .wall.east { right: 7%; top: 34%; width: 6px; height: 41%; }
+      .door { position: absolute; width: 30px; height: 8px; background: var(--warning); border: 2px solid var(--ink); }
+      .door.west { left: 32%; top: 51%; }
+      .door.east { right: 32%; top: 51%; }
+      .door.entry { left: 48%; top: 74%; width: 38px; height: 8px; }
+
+      .path { position: absolute; height: 7px; border: 1px solid var(--paper); background: repeating-linear-gradient(90deg, var(--safe-hi) 0 12px, transparent 12px 20px); filter: drop-shadow(2px 2px 0 var(--ink)); }
+      .path.main { left: 48%; top: 55%; width: 5%; height: 34%; transform: rotate(4deg); transform-origin: top; }
+      .path.west { left: 26%; top: 54%; width: 25%; transform: rotate(-12deg); transform-origin: right; }
+      .path.blocked { left: 51%; top: 54%; width: 25%; background: repeating-linear-gradient(90deg, var(--danger) 0 12px, transparent 12px 20px); transform: rotate(12deg); transform-origin: left; }
+      .barrier { position: absolute; left: 64%; top: 57%; width: 40px; height: 20px; border: 3px solid var(--danger); background: repeating-linear-gradient(135deg, var(--danger) 0 5px, #f5d77a 5px 10px); transform: rotate(12deg); }
+
+      .sprite { position: absolute; width: 24px; height: 30px; border: 2px solid var(--ink); background: #e2a430; box-shadow: 3px 3px 0 var(--ink); z-index: 4; }
+      .sprite::before { content: ""; position: absolute; left: 4px; top: -10px; width: 12px; height: 12px; border: 2px solid var(--ink); background: #d09a70; }
+      .sprite::after { content: ""; position: absolute; left: 5px; bottom: 5px; width: 10px; height: 8px; background: #233b59; }
+      .sprite.player { left: 47%; top: 60%; }
+      .sprite.player + .nameplate { left: 42%; top: 66%; }
+      .sprite.warden { left: 78%; top: 52%; background: var(--blue); }
+      .sprite.warden + .nameplate { left: 73%; top: 58%; }
+      .nameplate { position: absolute; z-index: 5; padding: 3px 5px; border: 2px solid var(--ink); background: var(--paper); color: var(--ink); font-size: 9px; font-weight: 900; letter-spacing: .05em; }
+
+      .objective { position: absolute; z-index: 3; width: 18px; height: 18px; border: 3px solid var(--paper); background: var(--warning); box-shadow: 2px 2px 0 var(--ink); transform: rotate(45deg); }
+      .objective.backpack { left: 52%; top: 84%; }
+      .objective.valve { left: 16%; top: 64%; background: var(--danger); }
+      .objective.guide { left: 82%; top: 45%; background: #7d61c9; }
+      .objective.current { outline: 3px solid var(--warning); outline-offset: 4px; }
+      .exit { position: absolute; left: 46%; top: 88%; z-index: 5; padding: 6px 12px; border: 3px solid var(--ink); background: var(--safe-hi); color: var(--ink); box-shadow: 3px 3px 0 var(--ink); font-size: 12px; font-weight: 900; }
+      .assembly { position: absolute; left: 43%; top: 96%; color: var(--safe); font-size: 10px; font-weight: 900; letter-spacing: .1em; }
+      .hazard { position: absolute; left: 18%; top: 53%; z-index: 5; padding: 5px 7px; border: 2px solid var(--danger); background: #f6d8d8; color: #8b2e34; box-shadow: 3px 3px 0 var(--ink); font-size: 10px; font-weight: 900; }
+      .map-note { position: absolute; left: 12px; bottom: 12px; padding: 5px 7px; border: 2px solid var(--ink); background: rgba(247,251,253,.9); font-size: 10px; font-weight: 900; }
+
+      .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; padding: 10px 12px; border-top: 2px solid var(--frame); background: var(--panel); color: var(--ink); font-size: 10px; font-weight: 900; text-transform: uppercase; }
+      .legend span { display: inline-flex; align-items: center; gap: 5px; }
+      .legend i { display: inline-block; width: 12px; height: 8px; border: 2px solid var(--ink); background: var(--safe-hi); }
+      .legend i.danger { background: var(--danger); }
+      .legend i.player { width: 10px; height: 14px; background: #e2a430; }
+      .legend i.exit { background: var(--safe); }
+
+      .rail { display: flex; flex-direction: column; gap: 16px; }
+      .rail-panel { background: var(--panel); }
+      .panel-title { min-height: 36px; background: #23649a; font-size: 11px; }
+      .panel-body { padding: 12px; }
+      .state { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid #a7bdcc; font-size: 11px; font-weight: 900; }
+      .state:last-child { border-bottom: 0; }
+      .state b { color: var(--safe); }
+      .objective-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; font-size: 11px; font-weight: 900; }
+      .objective-list li { display: flex; gap: 8px; align-items: flex-start; }
+      .check { display: grid; place-items: center; width: 16px; height: 16px; flex: 0 0 auto; border: 2px solid var(--safe); background: var(--safe-hi); font-size: 10px; line-height: 1; }
+      .check.next { border-color: var(--warning); background: #fff2c9; color: #9b6718; }
+      .check.open { border-color: var(--muted); background: transparent; }
+      .dialogue { background: var(--paper); }
+      .dialogue .panel-title { background: var(--blue); }
+      .dialogue-copy { padding: 14px; font-family: Arial, sans-serif; font-size: 15px; font-weight: 800; line-height: 1.35; }
+      .action { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 2px solid #a7bdcc; }
+      .action button { min-height: 44px; padding: 8px 12px; border: 2px solid var(--ink); background: var(--safe-hi); color: var(--ink); box-shadow: 3px 3px 0 var(--ink); font: inherit; font-size: 11px; font-weight: 900; }
+      .action small { color: var(--muted); font-size: 10px; font-weight: 900; }
+
+      @media (max-width: 900px) {
+        .shell { min-height: 100vh; padding: 8px; }
+        .workspace { grid-template-columns: 1fr; }
+        .map { min-height: 58vh; }
+        .rail { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .dialogue { grid-column: 1 / -1; }
+      }
+
+      @media (max-width: 540px) {
+        .topbar { align-items: flex-start; flex-direction: column; gap: 8px; }
+        .top-meta { justify-content: flex-start; }
+        .map { min-height: 480px; }
+        .rail { display: flex; }
+        .room { font-size: 8px; padding-top: 8px; }
+        .nameplate, .hazard, .map-note { font-size: 8px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell" aria-label="CampusEvac pixel tactical UI prototype">
+      <header class="topbar">
+        <div class="brand">Campus<span>Evac</span></div>
+        <div class="top-meta">
+          <span class="badge mode">EVACUEE VIEW</span>
+          <span class="badge live">LIVE</span>
+          <span class="badge">LIVE STATE</span>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <section class="map-frame" aria-label="Real CampusEvac authored map prototype">
+          <div class="map-title">
+            <span>Campus block / top-down route</span>
+            <small>Current: Central Corridor</small>
+          </div>
+          <div class="map">
+            <div class="room science"><strong>Chemistry Lab 1A</strong></div>
+            <div class="room lobby"><strong>Central Corridor</strong></div>
+            <div class="room academic"><strong>Classroom A201</strong></div>
+            <div class="room entry"><strong>Main Entrance</strong></div>
+            <div class="room passage-west"><strong>Science</strong></div>
+            <div class="room passage-east"><strong>Academic</strong></div>
+            <div class="room outside"><strong>Plaza / Assembly Point</strong></div>
+
+            <div class="wall north"></div>
+            <div class="wall south"></div>
+            <div class="wall west"></div>
+            <div class="wall east"></div>
+            <div class="door west"></div>
+            <div class="door east"></div>
+            <div class="door entry"></div>
+
+            <div class="path west"></div>
+            <div class="path main"></div>
+            <div class="path blocked"></div>
+            <div class="barrier" title="East route blocked"></div>
+
+            <div class="sprite player" aria-label="Current evacuee"></div>
+            <div class="nameplate">YOU</div>
+            <div class="sprite warden" aria-label="Warden post"></div>
+            <div class="nameplate">WARDEN POST</div>
+
+            <div class="objective backpack current" title="Emergency backpack"></div>
+            <div class="objective valve" title="Gas isolation valve"></div>
+            <div class="objective guide" title="Emergency route guide"></div>
+            <div class="hazard">SMOKE / SCIENCE BLOCK</div>
+            <div class="exit">EXIT</div>
+            <div class="assembly">ASSEMBLY BEACON</div>
+            <div class="map-note">GREEN = SAFE ROUTE / RED = BLOCKED ROUTE</div>
+          </div>
+          <div class="legend">
+            <span><i class="player"></i> You</span>
+            <span><i></i> Safe route</span>
+            <span><i class="danger"></i> Blocked route</span>
+            <span><i class="exit"></i> Exit / assembly</span>
+          </div>
+        </section>
+
+        <aside class="rail">
+          <section class="dialogue">
+            <div class="panel-title"><span>Next action</span><span>01</span></div>
+            <div class="dialogue-copy">
+              Find the emergency backpack at the Main Entrance before entering the block.
+              <div class="action">
+                <small>Target: Emergency backpack</small>
+                <button type="button">USE</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="rail-panel">
+            <div class="panel-title">Evacuation status</div>
+            <div class="panel-body">
+              <div class="state"><span>Condition</span><b>EVACUATING</b></div>
+              <div class="state"><span>Air</span><strong>DRILL STATE</strong></div>
+              <div class="state"><span>Health</span><strong>DRILL STATE</strong></div>
+              <div class="state"><span>Route</span><b>WEST / AUTHORED</b></div>
+            </div>
+          </section>
+
+          <section class="rail-panel">
+            <div class="panel-title">Drill objectives</div>
+            <div class="panel-body">
+              <ul class="objective-list">
+                <li><span class="check next">!</span><span>Emergency backpack</span></li>
+                <li><span class="check open"></span><span>Lab access card</span></li>
+                <li><span class="check open"></span><span>Gas isolation valve</span></li>
+                <li><span class="check open"></span><span>Emergency route guide</span></li>
+                <li><span class="check open"></span><span>Marked exit and assembly</span></li>
+              </ul>
+            </div>
+          </section>
+
+          <section class="rail-panel">
+            <div class="panel-title">Connection</div>
+            <div class="panel-body">
+              <div class="state"><span>Room</span><strong>TRAINING</strong></div>
+              <div class="state"><span>Signal</span><b>LIVE</b></div>
+            </div>
+          </section>
+        </aside>
+      </section>
+    </main>
+  </body>
+</html>

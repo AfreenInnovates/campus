@@ -5,7 +5,7 @@ const TABLE = "campusevac-events";
 const WEEK_SECONDS = 7 * 24 * 60 * 60;
 const CODE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 const CHANNELS = ["room", "cmd"];
-const MESSAGE_TYPES = ["sync", "room", "reject", "leave", "progress", "intent", "ack"];
+const MESSAGE_TYPES = ["sync", "room", "reject", "leave", "presence", "progress", "intent", "ack"];
 const MAX_EVENT_CHARS = 8000;
 
 // APPSYNC_JS has no regex support, so room codes are checked character by character.

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import DrillShell from "../../DrillShell";
 import { roomById } from "../../level";
+import { readRecoverySnapshot } from "../../net/recovery";
 import { COUNTDOWN_MS, type DrillRoom } from "../../net/types";
 import { resolveRoom, useSession } from "../../session";
 import { useSimulation } from "../../store";
@@ -71,7 +72,11 @@ export default function RoomClient({ code }: { code: string }) {
         ? { kind: "evacuee" }
         : { kind: "warden", sectorId: me.sectorId ?? "sec" },
     );
-  }, [me?.role, me?.sectorId, room?.phase]);
+    if (me.role === "evacuee") {
+      const recovered = readRecoverySnapshot(code, room.drillId, room.createdAt);
+      if (recovered) sim.restoreEvacueeState(recovered.state);
+    }
+  }, [code, me?.role, me?.sectorId, room?.createdAt, room?.drillId, room?.phase]);
 
   const join = async () => {
     if (joining) return;
@@ -148,5 +153,5 @@ export default function RoomClient({ code }: { code: string }) {
 }
 
 function Frame({ code, children, onBack }: { code: string; children: React.ReactNode; onBack?: () => void }) {
-  return <main className="brutal-grid relative min-h-0 flex-1 overflow-y-auto text-ink"><div className="mx-auto flex min-h-full max-w-5xl flex-col px-5 py-5 sm:px-8 sm:py-8"><Link href="/simulation/rooms" onClick={onBack} className="border-b-2 border-ink pb-4 text-[11px] font-black uppercase tracking-[0.18em] hover:text-violet">&lt;- drills</Link><div className="mt-12 max-w-3xl">{children}</div><div className="mt-auto pt-16 text-[10px] font-bold uppercase tracking-[0.16em] text-ink-soft">drill / {code} / AWS AppSync Events</div></div></main>;
+  return <main className="ce-entry-shell brutal-grid relative min-h-0 flex-1 overflow-y-auto text-ink"><div className="mx-auto flex min-h-full max-w-5xl flex-col px-5 py-5 sm:px-8 sm:py-8"><Link href="/simulation/rooms" onClick={onBack} className="border-b-2 border-ink pb-4 text-[11px] font-black uppercase tracking-[0.18em] hover:text-violet">&lt;- drills</Link><div className="mt-12 max-w-3xl">{children}</div><div className="mt-auto pt-16 text-[10px] font-bold uppercase tracking-[0.16em] text-ink-soft">drill / {code} / AWS AppSync Events</div></div></main>;
 }

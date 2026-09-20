@@ -17,6 +17,7 @@ import {
   SMOKE_EXPOSURE_THRESHOLD,
   isRouteBlocked,
 } from "./smoke";
+import { runtime } from "./runtime";
 import type {
   CommandAcknowledgement,
   EvidenceRecord,
@@ -27,8 +28,6 @@ import type {
 
 export type ViewMode = "evacuee" | "warden" | "evidence";
 
-/** How the evacuee sees the world: over the shoulder (default) or through their own eyes. */
-export type CameraMode = "third" | "first";
 export type BriefingStatus = "locked" | "playing" | "complete";
 
 export type SimulationMode =
@@ -87,8 +86,6 @@ export const setProgressPublisher = (publish: ProgressPublisher | null) => {
 export interface SimulationState {
   mode: SimulationMode;
   view: ViewMode;
-  /** Kept across drill resets so a player's choice sticks. */
-  cameraMode: CameraMode;
   briefingStatus: BriefingStatus;
   /** Pause menu open: movement and interaction stop; solo also freezes the hazard clock. */
   paused: boolean;
@@ -120,7 +117,6 @@ export interface SimulationState {
   setPaused: (paused: boolean) => void;
   completeBriefing: () => void;
   setView: (view: ViewMode) => void;
-  toggleCameraMode: () => void;
   interactScenario: (id: ScenarioObjectId) => void;
   setPrompt: (prompt: string | null) => void;
   enterSector: (sector: RoomId) => void;
@@ -136,6 +132,7 @@ export interface SimulationState {
   fail: (reason: string) => void;
   push: (text: string, tone?: LogEntry["tone"]) => void;
   reset: () => void;
+  restoreEvacueeState: (state: import("./net/types").EvacueeState) => void;
   applyWardenState: (state: WardenState) => void;
 }
 
@@ -168,7 +165,6 @@ const initial = {
 export const useSimulation = create<SimulationState>()((set, get) => ({
   mode: { kind: "solo" },
   view: "evacuee",
-  cameraMode: "third",
   resetSeq: 0,
   ...initial,
 
@@ -194,9 +190,6 @@ export const useSimulation = create<SimulationState>()((set, get) => ({
   },
 
   setView: (view) => set({ view }),
-
-  toggleCameraMode: () =>
-    set((state) => ({ cameraMode: state.cameraMode === "third" ? "first" : "third" })),
 
   interactScenario: (id) => {
     const state = get();
@@ -335,6 +328,37 @@ export const useSimulation = create<SimulationState>()((set, get) => ({
   reset: () => {
     logSeq = 0;
     set((state) => ({ ...initial, resetSeq: state.resetSeq + 1 }));
+  },
+
+  restoreEvacueeState: (state) => {
+    runtime.recoveryPosition = {
+      x: state.position[0],
+      z: state.position[1],
+      yaw: state.position[2],
+    };
+    runtime.recoveryHazardElapsed = state.hazardElapsed;
+    set((current) => ({
+      briefingStatus: "complete",
+      paused: false,
+      health: state.health,
+      air: state.air,
+      hasBackpack: state.hasBackpack,
+      equipped: state.equipped,
+      scenarioProgress: state.scenarioProgress,
+      smokeIntensity: state.smokeIntensity,
+      hazardElapsed: state.hazardElapsed,
+      routeBlocked: state.routeStatus === "unsafe",
+      routeStatus: state.routeStatus,
+      stamina: state.stamina,
+      sector: state.sectorId,
+      latestMessage: state.routeMessage,
+      interventionApplied: state.interventionApplied,
+      assemblyProgress: state.assemblyProgress,
+      assemblyConfirmed: state.assemblyConfirmed,
+      failed: state.failed,
+      log: state.log,
+      resetSeq: current.resetSeq + 1,
+    }));
   },
 
   applyWardenState: (state) => {

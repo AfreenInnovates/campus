@@ -1,12 +1,13 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
-import Minimap from "./components/Minimap";
+import EvacueeConsole from "./components/EvacueeConsole";
+import WardenConsole from "./components/WardenConsole";
 import TouchControls from "./components/TouchControls";
+import SimulationDriver from "./SimulationDriver";
 import { useCoarsePointer } from "./useCoarsePointer";
-import { COMMANDS, commandByCode, type CommandCode } from "./commands";
+import { commandByCode } from "./commands";
 import {
   CRITICAL_SCENARIO_OBJECTS,
   nextScenarioGuidance,
@@ -33,17 +34,8 @@ import { bucketAir, bucketSmoke, type DrillContext, type DrillEvent } from "./na
 import { buildCompletionModel } from "./result-model";
 import { runtime } from "./runtime";
 import { resolveRoom, useSession } from "./session";
-import { useSimulation, watchedSector, VIEWS, type ViewMode } from "./store";
-import { RECONNECT_GRACE_MS, type EvidenceStatus, type RouteMessage } from "./net/types";
-
-const DrillCanvas = dynamic(() => import("./DrillCanvas"), {
-  ssr: false,
-  loading: () => (
-    <div className="absolute inset-0 grid place-items-center text-xs font-black uppercase tracking-[0.3em] text-paper/60">
-      Loading the Science Block...
-    </div>
-  ),
-});
+import { useSimulation, VIEWS } from "./store";
+import { RECONNECT_GRACE_MS, presenceOf, type RouteMessage } from "./net/types";
 
 const STEPS: ScenarioObjectId[] = [...CRITICAL_SCENARIO_OBJECTS, "main-exit"];
 const placeName = (id: ScenarioObjectId) => roomById(scenarioObjectById(id).room).name.split(" / ").pop();
@@ -59,151 +51,6 @@ function Key({ children, light = false, small = false }: { children: ReactNode; 
     <kbd className="hud-key" style={style}>
       {children}
     </kbd>
-  );
-}
-
-function Bar({ label, value, color, danger }: { label: string; value: number; color: string; danger?: boolean }) {
-  const fill = danger ? "var(--danger)" : color;
-  return (
-    <div className="w-40">
-      <div className="mb-1 flex items-center justify-between text-[10px] font-black uppercase tracking-[0.16em] text-paper/75">
-        <span>{label}</span>
-        <span className="font-mono" style={{ color: fill }}>
-          {Math.round(value)}
-        </span>
-      </div>
-      <div className="h-2.5 w-full border border-paper/25 bg-black/40">
-        <div className="h-full transition-[width] duration-150" style={{ width: `${Math.max(0, Math.min(100, value))}%`, background: fill }} />
-      </div>
-    </div>
-  );
-}
-
-function statusColor(status: EvidenceStatus) {
-  return status === "VERIFIED"
-    ? "var(--mint)"
-    : status === "OBSERVED"
-      ? "var(--sun)"
-      : status === "STALE" || status === "EXPIRED"
-        ? "var(--coral)"
-        : "var(--violet)";
-}
-
-function LocationHeader({ tag }: { tag: string }) {
-  const sector = useSimulation((state) => state.sector);
-  const parts = roomById(sector).name.split(" / ");
-  const block = parts.length > 1 ? parts[0] : "Campus";
-  const place = parts[parts.length - 1];
-  return (
-    <div className="pointer-events-auto">
-      <div className="flex items-center gap-2">
-        <span className="grid h-7 w-7 place-items-center border-2 border-ink bg-coral text-[10px] font-black text-ink shadow-[2px_2px_0_var(--ink)]">CE</span>
-        <span className="text-lg font-black tracking-[-0.04em] text-paper [text-shadow:2px_2px_0_var(--ink)]">CampusEvac</span>
-        <span className="hidden border border-paper/30 bg-night/70 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.18em] text-paper/75 sm:inline">{tag}</span>
-      </div>
-      <div className="mt-1.5 inline-flex max-w-full items-center gap-2 bg-night/70 px-2 py-1 text-[10px] font-black uppercase tracking-[0.18em]">
-        <span className="text-sun">{block}</span>
-        <span className="text-paper/35">|</span>
-        <span className="truncate text-paper">{place}</span>
-      </div>
-    </div>
-  );
-}
-
-function ObjectivesPanel() {
-  const progress = useSimulation((state) => state.scenarioProgress);
-  const guidance = nextScenarioGuidance(progress);
-  const done = CRITICAL_SCENARIO_OBJECTS.filter((id) => progress[id]).length;
-  return (
-    <section className="hud-panel pointer-events-auto w-[min(19.5rem,calc(100vw-1.5rem))] p-3" aria-label="Objectives">
-      <div className="flex items-center justify-between border-b border-paper/15 pb-2">
-        <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-sun">Objectives</h2>
-        <span className="font-mono text-[10px] text-paper/60">
-          {done}/{CRITICAL_SCENARIO_OBJECTS.length} done
-        </span>
-      </div>
-      <ol className="mt-2 space-y-1.5">
-        {STEPS.map((id) => {
-          const complete = progress[id];
-          const current = guidance.id === id;
-          return (
-            <li key={id} className={`${current ? "flex" : "hidden sm:flex"} items-start gap-2 text-[12px] leading-snug`}>
-              <span
-                className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center border-2 text-[9px] font-black ${
-                  complete ? "border-mint bg-mint text-ink" : current ? "border-sun text-sun" : "border-paper/30 text-transparent"
-                }`}
-                aria-hidden
-              >
-                {complete ? "✓" : current ? "›" : ""}
-              </span>
-              <div className="min-w-0">
-                <div className={complete ? "text-paper/40 line-through decoration-paper/30" : current ? "font-bold text-paper" : "text-paper/70"}>
-                  {scenarioObjectById(id).label}
-                  <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wider text-paper/40">{placeName(id)}</span>
-                </div>
-                {current && <p className="mt-1 text-[11px] leading-snug text-sun">{guidance.instruction}</p>}
-              </div>
-            </li>
-          );
-        })}
-      </ol>
-    </section>
-  );
-}
-
-function Vitals() {
-  const health = useSimulation((state) => state.health);
-  const air = useSimulation((state) => state.air);
-  const cameraMode = useSimulation((state) => state.cameraMode);
-  return (
-    <div className="hud-panel flex flex-col gap-2 p-3" style={{ borderLeftColor: "var(--mint)" }}>
-      <Bar label="Health" value={health} color="var(--mint)" danger={health < 35} />
-      <Bar label="Air" value={air} color="#6fb8ff" danger={air < 35} />
-      <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-paper/45">
-        Camera: {cameraMode === "third" ? "over the shoulder" : "first person"}
-      </div>
-    </div>
-  );
-}
-
-function PromptBar() {
-  const prompt = useSimulation((state) => state.prompt);
-  if (!prompt) return null;
-  const action = prompt.match(/^Press E to (.+)$/);
-  return (
-    <div key={prompt} className="hud-rise flex max-w-[min(34rem,calc(100vw-2rem))] items-center gap-2 border-2 border-ink bg-paper px-3 py-2 text-[13px] font-bold text-ink shadow-[4px_4px_0_var(--ink)]">
-      {action ? (
-        <>
-          Press <Key light>E</Key> to {action[1]}
-        </>
-      ) : (
-        <>
-          <span className="bg-coral px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest">Heads up</span>
-          {prompt}
-        </>
-      )}
-    </div>
-  );
-}
-
-function ControlsHint() {
-  const items: [string, string][] = [
-    ["WASD", "move"],
-    ["Shift", "sprint"],
-    ["Space", "jump"],
-    ["E", "interact"],
-    ["V", "camera"],
-    ["Esc", "menu"],
-  ];
-  return (
-    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-night/60 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-paper/70">
-      {items.map(([key, label]) => (
-        <span key={key} className="flex items-center gap-1.5">
-          <Key small>{key}</Key>
-          {label}
-        </span>
-      ))}
-    </div>
   );
 }
 
@@ -265,262 +112,9 @@ function NarrationCaption() {
 
   if (!caption) return null;
   return (
-    <div key={caption.id} className="hud-rise max-w-[min(40rem,calc(100vw-2rem))] bg-night/85 px-4 py-2.5 text-center text-[14px] leading-snug text-paper" role="status" aria-live="polite">
+    <div key={caption.id} className="ce-narration-caption hud-rise max-w-[min(40rem,calc(100vw-2rem))] px-4 py-2.5 text-center text-[14px] leading-snug text-paper" role="status" aria-live="polite">
       <span className="mr-2 text-[10px] font-black uppercase tracking-[0.2em] text-sun">Narrator</span>
       {caption.text}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------ warden panels */
-
-function EvidencePanel() {
-  const mode = useSimulation((state) => state.mode);
-  const view = useSimulation((state) => state.view);
-  const evidenceMap = useSimulation((state) => state.evidence);
-  const observeEvidence = useSession((state) => state.observeEvidence);
-  const sendCommand = useSession((state) => state.sendCommand);
-  const evidence = Object.values(evidenceMap);
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  if (view === "evacuee" || (mode.kind !== "warden" && evidence.length === 0)) return null;
-
-  return (
-    <div className="hud-panel pointer-events-auto w-[min(22rem,calc(100vw-1.5rem))] p-3">
-      <div className="flex items-baseline justify-between border-b border-paper/15 pb-2">
-        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-sun">Evidence</span>
-        <span className="font-mono text-[10px] text-paper/50">{evidence.length} items</span>
-      </div>
-      {evidence.length === 0 ? (
-        <p className="mt-3 text-[11px] text-paper/55">Waiting for the sector feed.</p>
-      ) : (
-        <ul className="mt-2 space-y-2">
-          {evidence.map((item) => {
-            const color = statusColor(item.status);
-            const age = item.observedAt ? `${Math.max(0, Math.floor((now - item.observedAt) / 1000))}s ago` : "not observed yet";
-            return (
-              <li key={item.id} className="border-b border-paper/10 pb-2 last:border-0 last:pb-0">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-[12px] font-bold text-paper">{item.label}</div>
-                    <div className="mt-0.5 text-[10px] text-paper/50">
-                      {item.source} · {age}
-                    </div>
-                  </div>
-                  <span className="shrink-0 font-mono text-[9px] font-black" style={{ color }}>
-                    {item.status}
-                  </span>
-                </div>
-                <div className="mt-1 text-[11px] leading-snug text-paper/70">{item.nextAction}</div>
-                <div className="mt-2 flex gap-2">
-                  {item.status === "UNKNOWN" && (
-                    <button onClick={() => observeEvidence(item.id)} className="border-2 border-sun px-2 py-1 text-[9px] font-black uppercase tracking-wider text-sun hover:bg-sun hover:text-ink">
-                      Observe
-                    </button>
-                  )}
-                  {item.status === "OBSERVED" && (
-                    <button onClick={() => sendCommand("VERIFY_EAST_ROUTE", item.id)} className="border-2 border-mint px-2 py-1 text-[9px] font-black uppercase tracking-wider text-mint hover:bg-mint hover:text-ink">
-                      Verify
-                    </button>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function Log() {
-  const log = useSimulation((state) => state.log);
-  if (!log.length) return null;
-  return (
-    <div className="hud-panel w-[min(20rem,calc(100vw-1.5rem))] p-3">
-      <div className="mb-2 flex items-center justify-between border-b border-paper/15 pb-2 text-[9px] font-black uppercase tracking-[0.18em] text-paper/55">
-        <span>Drill log</span>
-        <span>{log.length}/6</span>
-      </div>
-      <div className="space-y-1.5 text-right">
-        {log.map((entry, index) => (
-          <div
-            key={entry.id}
-            className="border-b border-paper/5 pb-1.5 text-[11px] leading-snug last:border-0 last:pb-0"
-            style={{
-              color: entry.tone === "bad" ? "var(--danger)" : entry.tone === "good" ? "var(--mint)" : "rgba(248,242,234,0.7)",
-              opacity: 1 - index * 0.1,
-            }}
-          >
-            {entry.text}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ConnectionBadge() {
-  const status = useSession((state) => state.status);
-  const label = status === "connected" ? "Live" : status === "connecting" ? "Connecting" : status === "idle" ? "Offline practice" : status;
-  const color = status === "connected" ? "var(--mint)" : status === "idle" ? "var(--violet)" : "var(--sun)";
-  return (
-    <span className="flex items-center gap-1.5 bg-night/70 px-2 py-1.5 font-mono text-[9px] font-bold uppercase" style={{ color }}>
-      <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />
-      {label}
-    </span>
-  );
-}
-
-function RouteMessageCard() {
-  const mode = useSimulation((state) => state.mode);
-  const message = useSimulation((state) => state.latestMessage);
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 250);
-    return () => window.clearInterval(timer);
-  }, []);
-  if (mode.kind !== "evacuee" || !message || message.expiresAt <= now) return null;
-  return (
-    <div className="hud-rise max-w-[min(30rem,calc(100vw-1.5rem))] border-2 border-mint bg-night/95 px-4 py-3 shadow-[5px_5px_0_var(--mint)]" role="status" aria-live="polite">
-      <div className="text-[10px] font-black uppercase tracking-[0.18em] text-mint">Message from the warden · {message.confidence}</div>
-      <div className="mt-1 text-sm font-black uppercase text-paper">{message.caption}</div>
-      <div className="mt-0.5 text-[10px] text-paper/55">Disappears in {Math.ceil((message.expiresAt - now) / 1000)}s · you choose the route</div>
-    </div>
-  );
-}
-
-function HazardBanner() {
-  const mode = useSimulation((state) => state.mode);
-  const air = useSimulation((state) => state.air);
-  const smoke = useSimulation((state) => state.smokeIntensity);
-  const routeStatus = useSimulation((state) => state.routeStatus);
-  const failed = useSimulation((state) => state.failed);
-  const complete = useSimulation((state) => state.assemblyConfirmed);
-  const previous = useRef<string | null>(null);
-  const warden = mode.kind === "warden";
-  const alert = complete
-    ? null
-    : failed
-      ? { label: "Drill ended", detail: "See the debrief to try again.", color: "var(--danger)" }
-      : air <= 30
-        ? { label: "Air getting thin", detail: "Leave the smoke. Head for a clear room.", color: "var(--danger)" }
-        : routeStatus === "unsafe" && warden
-          ? { label: "East passage unsafe", detail: "Verify the evidence, then send the west route.", color: "var(--danger)" }
-          : smoke > 0.2 && !warden
-            ? { label: "Smoke in this area", detail: "Keep moving and watch for warden messages.", color: "var(--coral)" }
-            : null;
-  const alertLabel = alert?.label ?? null;
-  useEffect(() => {
-    if (alertLabel && previous.current !== alertLabel) playSignal("alert");
-    previous.current = alertLabel;
-  }, [alertLabel]);
-  if (!alert) return null;
-  return (
-    <div className="flex max-w-[min(26rem,calc(100vw-1.5rem))] items-center gap-3 border-2 bg-night/90 px-4 py-2.5 shadow-[4px_4px_0_rgba(0,0,0,0.5)]" style={{ borderColor: alert.color }} role="status" aria-live="polite">
-      <span className="signal-pulse h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: alert.color }} />
-      <div>
-        <div className="text-[11px] font-black uppercase tracking-[0.17em]" style={{ color: alert.color }}>
-          {alert.label}
-        </div>
-        <div className="mt-0.5 text-[11px] text-paper/80">{alert.detail}</div>
-      </div>
-    </div>
-  );
-}
-
-function CommandDeck() {
-  const mode = useSimulation((state) => state.mode);
-  const evidence = useSimulation((state) => state.evidence["east-route-evidence"]);
-  const interventionApplied = useSimulation((state) => state.interventionApplied);
-  const scenarioProgress = useSimulation((state) => state.scenarioProgress);
-  const lastAcknowledgement = useSimulation((state) => state.lastAcknowledgement);
-  const sendCommand = useSession((state) => state.sendCommand);
-  const guidance = nextScenarioGuidance(scenarioProgress);
-  const [sent, setSent] = useState<CommandCode | null>(null);
-  if (mode.kind !== "warden") return null;
-  return (
-    <div className="hud-panel w-full p-2.5 sm:w-[min(42rem,calc(100vw-1.5rem))]">
-      <div className="flex items-center justify-between gap-3 border-b border-paper/15 pb-1.5">
-        <div className="text-[10px] font-black uppercase tracking-[0.18em] text-sun">Warden commands</div>
-        <span className="font-mono text-[9px] text-paper/50">sector / {mode.sectorId}</span>
-      </div>
-      <div className="mt-2 flex gap-1 overflow-x-auto sm:gap-1.5">
-        {COMMANDS.map((command) => {
-          const disabled =
-            command.code === "VERIFY_EAST_ROUTE"
-              ? evidence?.status !== "OBSERVED"
-              : command.code === "SEND_WEST_ROUTE" || command.code === "MARK_EAST_UNSAFE"
-                ? evidence?.status !== "VERIFIED"
-                : interventionApplied || evidence?.status !== "VERIFIED";
-          return (
-            <button
-              key={command.code}
-              disabled={disabled}
-              onClick={() => {
-                sendCommand(command.code, command.code === "APPLY_VENTILATION" ? undefined : "east-route-evidence");
-                setSent(command.code);
-                playSignal("command");
-                window.setTimeout(() => setSent((current) => (current === command.code ? null : current)), 900);
-              }}
-              className="min-w-0 flex-1 border-2 border-paper/15 bg-night/60 px-1 py-2.5 text-center transition enabled:hover:border-paper/50 disabled:cursor-not-allowed disabled:opacity-30 sm:min-w-[6.5rem] sm:py-2"
-              style={{ borderLeftColor: command.color, borderLeftWidth: 4 }}
-            >
-              <span className="block font-mono text-[9px] font-black" style={{ color: command.color }}>
-                {sent === command.code ? "SENT" : command.label}
-              </span>
-              <span className="mt-0.5 hidden truncate text-[9px] text-paper/55 sm:block">{command.detail}</span>
-            </button>
-          );
-        })}
-      </div>
-      <div className="mt-2 border-l-4 border-violet bg-paper/5 px-2 py-1.5">
-        <div className="text-[9px] font-black uppercase tracking-[0.18em] text-violet">Evacuee&apos;s next step</div>
-        <div className="mt-0.5 text-[12px] font-black text-paper">
-          {guidance.label} <span className="font-mono text-[9px] font-normal uppercase text-paper/50">/ {roomById(guidance.room).name}</span>
-        </div>
-        <div className="mt-0.5 text-[10px] leading-snug text-paper/65">{guidance.instruction}</div>
-      </div>
-      <div className="mt-1.5 flex justify-between gap-3 text-[9px] uppercase tracking-widest text-paper/45">
-        <span>Observe, verify, then send one clear message.</span>
-        <span>{Object.values(scenarioProgress).filter(Boolean).length}/7 steps</span>
-      </div>
-      {lastAcknowledgement && (
-        <div className="mt-2 border-t border-paper/15 pt-2 text-[10px]" style={{ color: lastAcknowledgement.accepted ? "var(--mint)" : "var(--danger)" }}>
-          {lastAcknowledgement.accepted ? "Accepted" : "Denied"}: {commandByCode(lastAcknowledgement.command).label}
-          {lastAcknowledgement.reason ? ` - ${lastAcknowledgement.reason}` : ""}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * Collapses a warden panel down to a toggle on a phone.
- *
- * Stacked, the evidence panel and the log push the minimap and the command deck off a 400px
- * screen entirely. On a desktop they stay exactly as they were.
- */
-function PhoneCollapsible({ label, children }: { label: string; children: ReactNode }) {
-  const touch = useCoarsePointer();
-  const [open, setOpen] = useState(false);
-  if (!touch) return <>{children}</>;
-  return (
-    <div className="pointer-events-auto flex flex-col items-end gap-2">
-      <button
-        onClick={() => setOpen((value) => !value)}
-        aria-expanded={open}
-        className="flex items-center gap-2 border-2 border-paper/30 bg-night/85 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-paper"
-      >
-        {label}
-        <span aria-hidden className="text-sun">{open ? "–" : "+"}</span>
-      </button>
-      {open && children}
     </div>
   );
 }
@@ -599,8 +193,8 @@ function EndDialog({
   children: ReactNode;
 }) {
   return (
-    <div className="pointer-events-auto absolute inset-0 z-50 grid place-items-center overflow-y-auto bg-night/75 p-4 backdrop-blur-sm">
-      <section role="dialog" aria-modal="true" aria-labelledby="end-title" className="brutal-panel w-full max-w-lg p-5 text-ink sm:p-7">
+    <div className="ce-overlay-scrim pointer-events-auto absolute inset-0 z-50 grid place-items-center overflow-y-auto p-4">
+      <section role="dialog" aria-modal="true" aria-labelledby="end-title" className="ce-overlay-panel brutal-panel w-full max-w-lg p-5 text-ink sm:p-7">
         <span className={`brutal-tag ${tag === "Drill complete" ? "bg-mint" : "bg-coral"}`}>{tag}</span>
         <h2 id="end-title" className="mt-3 text-4xl font-black uppercase leading-[0.95] tracking-[-0.05em]">
           {headline}
@@ -814,8 +408,8 @@ function Onboarding() {
     setDismissed(true);
   };
   return (
-    <div className="pointer-events-auto absolute inset-0 z-50 grid place-items-center overflow-y-auto bg-night/70 p-4 backdrop-blur-sm">
-      <section role="dialog" aria-modal="true" aria-labelledby="onboarding-title" className="brutal-panel w-full max-w-xl p-5 text-ink sm:p-7">
+    <div className="ce-overlay-scrim pointer-events-auto absolute inset-0 z-50 grid place-items-center overflow-y-auto p-4">
+      <section role="dialog" aria-modal="true" aria-labelledby="onboarding-title" className="ce-overlay-panel brutal-panel w-full max-w-xl p-5 text-ink sm:p-7">
         <span className="brutal-tag bg-sun">How to play</span>
         <h2 id="onboarding-title" className="mt-3 text-3xl font-black uppercase leading-[0.95] tracking-[-0.05em]">
           {warden ? "You see the danger. Talk them out." : "Six steps. Then get out."}
@@ -858,9 +452,7 @@ function Onboarding() {
                 [
                   ["WASD", "Move"],
                   ["Shift", "Sprint"],
-                  ["Space", "Jump"],
                   ["E", "Interact"],
-                  ["V", "Switch camera"],
                   ["Esc", "Pause menu"],
                 ] as const
               ).map(([key, label]) => (
@@ -982,8 +574,8 @@ function Briefing() {
   };
 
   return (
-    <div className="pointer-events-auto absolute inset-0 z-50 grid place-items-center overflow-y-auto bg-night/85 p-4 backdrop-blur-md">
-      <section className="brutal-panel-dark w-full max-w-2xl p-4 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="briefing-title">
+    <div className="ce-overlay-scrim pointer-events-auto absolute inset-0 z-50 grid place-items-center overflow-y-auto p-4">
+      <section className="ce-overlay-panel ce-briefing-panel brutal-panel-dark w-full p-4 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="briefing-title">
         <div className="flex items-start justify-between gap-4 border-b border-paper/15 pb-4">
           <div>
             <span className="brutal-tag bg-sun text-ink">Briefing</span>
@@ -1001,7 +593,7 @@ function Briefing() {
         <div className="mt-4">
           <BriefingArtwork slide={slide} />
         </div>
-        <div className="mt-4 border-l-4 border-sun bg-paper/5 px-4 py-3" aria-live="polite">
+        <div className="ce-briefing-caption mt-4 border-l-4 border-sun px-4 py-3" aria-live="polite">
           <div className="flex items-center justify-between gap-3 text-[10px] font-black uppercase tracking-[0.18em] text-sun">
             <span>Narrator</span>
             {provider === "bedrock" && <span className="text-paper/50">Amazon Bedrock</span>}
@@ -1029,17 +621,6 @@ function Briefing() {
       </section>
     </div>
   );
-}
-
-function requestCanvasLock() {
-  const canvas = document.querySelector<HTMLCanvasElement>(".drill-surface canvas");
-  if (!canvas) return;
-  try {
-    const result = canvas.requestPointerLock() as unknown as Promise<void> | void;
-    if (result && typeof result.catch === "function") result.catch(() => {});
-  } catch {
-    /* the next click on the canvas locks it */
-  }
 }
 
 /**
@@ -1093,12 +674,24 @@ function RotateHint() {
 
 function WaitingForPlayer() {
   const room = useSession((state) => state.room);
+  const myId = useSession((state) => state.myId);
+  const connectionStatus = useSession((state) => state.status);
   const setPaused = useSimulation((state) => state.setPaused);
   const resolved = resolveRoom(room);
   const missing =
-    resolved?.phase === "active" ? resolved.participants.find((item) => item.connected === false) : undefined;
+    resolved?.phase === "active"
+      ? resolved.participants.find(
+          (item) => item.id !== myId && presenceOf(item) !== "connected",
+        )
+      : undefined;
+  const selfRecovering =
+    resolved?.phase === "active" &&
+    (connectionStatus === "reconnecting" ||
+      connectionStatus === "syncing" ||
+      connectionStatus === "disconnected");
 
-  const [remaining, setRemaining] = useState(RECONNECT_GRACE_MS);
+  const [now, setNow] = useState(() => Date.now());
+  const [fallbackDeadline, setFallbackDeadline] = useState<number | null>(null);
   const autoPaused = useRef(false);
 
   // the room is what knows the grace period expired; the local sim drives the end card
@@ -1108,18 +701,24 @@ function WaitingForPlayer() {
     if (outcome === "participant-left") failSim("a participant did not return");
   }, [outcome, failSim]);
 
-  // Show a full ten seconds on the first paint rather than the previous run's zero. This is
-  // the derived-state-during-render pattern, so it stays pure: the deadline itself is read
-  // from the clock inside the effect.
   const missingId = missing?.id ?? null;
-  const [trackedId, setTrackedId] = useState<string | null>(null);
-  if (missingId !== trackedId) {
-    setTrackedId(missingId);
-    setRemaining(RECONNECT_GRACE_MS);
-  }
+  const waiting = !!missing || selfRecovering;
+  const deadline = missing?.reconnectUntil ?? fallbackDeadline;
 
   useEffect(() => {
-    if (!missingId) {
+    const nextDeadline = missingId ? Date.now() + RECONNECT_GRACE_MS : null;
+    const timer = window.setTimeout(() => setFallbackDeadline(nextDeadline), 0);
+    return () => window.clearTimeout(timer);
+  }, [missingId]);
+
+  useEffect(() => {
+    if (!waiting) return;
+    const tick = window.setInterval(() => setNow(Date.now()), 100);
+    return () => window.clearInterval(tick);
+  }, [waiting]);
+
+  useEffect(() => {
+    if (!waiting) {
       // only lift the pause this overlay put in place, never the player's own pause menu
       if (autoPaused.current) {
         autoPaused.current = false;
@@ -1129,40 +728,48 @@ function WaitingForPlayer() {
     }
     autoPaused.current = true;
     setPaused(true);
-    const endsAt = Date.now() + RECONNECT_GRACE_MS;
-    const tick = window.setInterval(() => setRemaining(Math.max(0, endsAt - Date.now())), 100);
-    return () => window.clearInterval(tick);
-  }, [missingId, setPaused]);
+  }, [setPaused, waiting]);
 
-  if (!missing) return null;
-  const seconds = Math.ceil(remaining / 1000);
+  if (!waiting) return null;
+  const remaining = deadline === null ? null : Math.max(0, deadline - now);
+  const seconds = remaining === null ? null : Math.ceil(remaining / 1000);
 
   return (
-    <div className="pointer-events-auto absolute inset-0 z-[60] grid place-items-center overflow-y-auto bg-night/85 p-4 backdrop-blur-sm">
+    <div className="ce-overlay-scrim pointer-events-auto absolute inset-0 z-[60] grid place-items-center overflow-y-auto p-4">
       <section
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="waiting-title"
-        className="brutal-panel-dark w-full max-w-md p-5 text-center sm:p-6"
+        className="ce-overlay-panel brutal-panel-dark w-full max-w-md p-5 text-center sm:p-6"
       >
-        <span className="brutal-tag bg-danger text-paper">Connection lost</span>
+        <span className="brutal-tag bg-danger text-paper">{selfRecovering ? "Reconnecting" : "Connection lost"}</span>
         <h2 id="waiting-title" className="mt-4 text-3xl font-black uppercase leading-none tracking-[-0.05em]">
-          Waiting for {missing.name}
+          {selfRecovering ? "Reconnecting to the drill" : `Waiting for ${missing?.name}`}
         </h2>
         <p className="mt-3 text-sm leading-relaxed text-paper/70">
-          The drill is paused. Air and smoke are frozen until they are back.
+          {selfRecovering
+            ? "The drill is paused while realtime state is synchronized."
+            : "The drill is paused. Air and smoke are frozen until they are back."}
         </p>
-        <div className="mt-6 font-mono text-6xl font-black leading-none text-sun" aria-live="polite">
-          {seconds}
-        </div>
-        <div className="mt-3 h-2 w-full border-2 border-paper/25">
-          <div
-            className="h-full bg-sun transition-[width] duration-100 ease-linear"
-            style={{ width: `${(remaining / RECONNECT_GRACE_MS) * 100}%` }}
-          />
-        </div>
+        {seconds !== null ? (
+          <>
+            <div className="mt-6 font-mono text-6xl font-black leading-none text-sun" aria-live="polite">
+              {seconds}
+            </div>
+            <div className="mt-3 h-2 w-full border-2 border-paper/25">
+              <div
+                className="h-full bg-sun transition-[width] duration-100 ease-linear"
+                style={{ width: `${Math.min(100, (remaining! / RECONNECT_GRACE_MS) * 100)}%` }}
+              />
+            </div>
+          </>
+        ) : (
+          <div className="mt-6 font-mono text-sm font-black uppercase tracking-[0.2em] text-sun" aria-live="polite">
+            Synchronizing...
+          </div>
+        )}
         <p className="mt-4 text-[11px] font-bold uppercase tracking-[0.14em] text-paper/45">
-          The drill ends if they do not return
+          {selfRecovering ? "Your progress is being held locally until the room is live" : "The drill ends if they do not return"}
         </p>
       </section>
     </div>
@@ -1175,8 +782,6 @@ function PauseMenu({ onRestart, onLeave, onHome }: { onRestart: () => void; onLe
   const mode = useSimulation((state) => state.mode);
   const view = useSimulation((state) => state.view);
   const setView = useSimulation((state) => state.setView);
-  const cameraMode = useSimulation((state) => state.cameraMode);
-  const toggleCameraMode = useSimulation((state) => state.toggleCameraMode);
   const touch = useCoarsePointer();
   const [voice, setVoice] = useState(true);
   const [wasPaused, setWasPaused] = useState(paused);
@@ -1187,15 +792,12 @@ function PauseMenu({ onRestart, onLeave, onHome }: { onRestart: () => void; onLe
   if (!paused) return null;
   const solo = mode.kind === "solo";
   const warden = mode.kind === "warden";
-  const resume = () => {
-    setPaused(false);
-    if (view === "evacuee" && !touch) requestCanvasLock();
-  };
+  const resume = () => setPaused(false);
   const row = "flex w-full items-center justify-between border-2 border-paper/20 px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.14em] text-paper hover:border-paper/60";
 
   return (
-    <div className="pointer-events-auto absolute inset-0 z-50 grid place-items-center overflow-y-auto bg-night/75 p-4 backdrop-blur-sm">
-      <section role="dialog" aria-modal="true" aria-labelledby="pause-title" className="brutal-panel-dark w-full max-w-md p-5 sm:p-6">
+    <div className="ce-overlay-scrim pointer-events-auto absolute inset-0 z-50 grid place-items-center overflow-y-auto p-4">
+      <section role="dialog" aria-modal="true" aria-labelledby="pause-title" className="ce-overlay-panel brutal-panel-dark w-full max-w-md p-5 sm:p-6">
         <div className="flex items-center justify-between">
           <span className="brutal-tag bg-sun text-ink">Paused</span>
           <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-paper/55">
@@ -1218,11 +820,6 @@ function PauseMenu({ onRestart, onLeave, onHome }: { onRestart: () => void; onLe
               className={row}
             >
               Restart drill <span className="text-paper/50">from the entrance</span>
-            </button>
-          )}
-          {!warden && (
-            <button onClick={toggleCameraMode} className={row}>
-              Camera <span className="text-sun">{cameraMode === "third" ? "Over the shoulder" : "First person"}</span>
             </button>
           )}
           <button
@@ -1260,7 +857,7 @@ function PauseMenu({ onRestart, onLeave, onHome }: { onRestart: () => void; onLe
                 </li>
               ))}
             </ol>
-            <p className="mt-3 text-[11px] text-paper/55">WASD move · Shift sprint · Space jump · E interact · V camera · Esc menu</p>
+            <p className="mt-3 text-[11px] text-paper/55">WASD move · Shift sprint · E interact · Esc menu</p>
           </details>
         )}
         <div className="mt-5 grid gap-2.5 border-t border-paper/15 pt-5 sm:grid-cols-2">
@@ -1285,12 +882,6 @@ export default function DrillShell({ title }: { title?: string }) {
   const mode = useSimulation((state) => state.mode);
   const view = useSimulation((state) => state.view);
   const setView = useSimulation((state) => state.setView);
-  const setPaused = useSimulation((state) => state.setPaused);
-  const air = useSimulation((state) => state.air);
-  const health = useSimulation((state) => state.health);
-  const smoke = useSimulation((state) => state.smokeIntensity);
-  const sector = useSimulation((state) => state.sector);
-  const routeStatus = useSimulation((state) => state.routeStatus);
   const reset = useSimulation((state) => state.reset);
   const leave = useSession((state) => state.leave);
   const onRouteMessage = useSession((state) => state.onRouteMessage);
@@ -1301,6 +892,8 @@ export default function DrillShell({ title }: { title?: string }) {
   const solo = mode.kind === "solo";
   const warden = mode.kind === "warden";
   const showStick = touch && view === "evacuee";
+  const tacticalEvacuee = !warden && view === "evacuee";
+  const tacticalWarden = warden || view !== "evacuee";
 
   useEffect(() => {
     if (!solo) return;
@@ -1312,34 +905,15 @@ export default function DrillShell({ title }: { title?: string }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [setView, solo]);
 
-  // Esc opens the menu. While the mouse is captured the browser eats that Esc to release the
-  // pointer, so losing the lock mid-drill opens the menu too.
   useEffect(() => {
-    const idle = () => {
-      const state = useSimulation.getState();
-      return state.failed || state.assemblyConfirmed || state.briefingStatus !== "complete";
-    };
-    const onLockChange = () => {
-      const state = useSimulation.getState();
-      if (document.pointerLockElement || state.view !== "evacuee" || idle()) return;
-      state.setPaused(true);
-    };
     const onKey = (event: KeyboardEvent) => {
       if (event.code !== "Escape" && event.code !== "KeyP") return;
       const state = useSimulation.getState();
-      if (document.pointerLockElement) {
-        if (event.code === "KeyP") document.exitPointerLock();
-        return;
-      }
-      if (!state.paused && idle()) return;
+      if (!state.paused && (state.failed || state.assemblyConfirmed || state.briefingStatus !== "complete")) return;
       state.setPaused(!state.paused);
     };
-    document.addEventListener("pointerlockchange", onLockChange);
     window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerlockchange", onLockChange);
-      window.removeEventListener("keydown", onKey);
-    };
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   useEffect(() => {
@@ -1350,17 +924,16 @@ export default function DrillShell({ title }: { title?: string }) {
     return onAcknowledgement((acknowledgement) => useSimulation.getState().receiveAcknowledgement(acknowledgement));
   }, [onAcknowledgement]);
 
-  // Warden snapshots drive the HUD and the remote evacuee marker. They are applied
-  // here, outside the canvas, so the station stays live before the 3D view mounts.
+  // Warden snapshots drive the console and the remote evacuee marker.
   useEffect(() => {
     if (!warden) return;
     return onWardenState((state) => {
       runtime.netEvacuee = state.evacuee
-        ? {
+          ? {
             x: state.evacuee.position[0],
-            y: state.evacuee.position[1],
-            z: state.evacuee.position[2],
-            yaw: state.evacuee.position[3],
+            z: state.evacuee.position[1],
+            yaw: state.evacuee.position[2],
+            sectorId: state.evacuee.sectorId,
             hasBackpack: state.hasBackpack,
             equipped: state.equipped,
             scenarioProgress: state.scenarioProgress,
@@ -1368,9 +941,7 @@ export default function DrillShell({ title }: { title?: string }) {
         : null;
       if (state.evacuee) {
         runtime.sector = state.evacuee.sectorId;
-        runtime.evacueeYaw = state.evacuee.position[3];
       }
-      runtime.alert = state.smokeIntensity * 100;
       useSimulation.getState().applyWardenState(state);
     });
   }, [onWardenState, warden]);
@@ -1387,9 +958,6 @@ export default function DrillShell({ title }: { title?: string }) {
     return () => window.removeEventListener("inspect-evidence", inspect);
   }, [observeEvidence, warden]);
 
-  const exitLock = () => {
-    if (document.pointerLockElement) document.exitPointerLock();
-  };
   const restart = () => {
     reset();
     setView("evacuee");
@@ -1406,120 +974,15 @@ export default function DrillShell({ title }: { title?: string }) {
     router.push("/");
   };
 
-  const watched = watchedSector(mode);
-  const tag = title ?? (warden ? "Warden" : mode.kind === "evacuee" ? "Evacuee" : "Solo practice");
-  const evacueeHud = !warden && view === "evacuee";
-
   return (
-    <div className="drill-surface absolute inset-0 overflow-hidden bg-night text-paper">
-      <DrillCanvas />
+    <div className="ce-tactical-shell absolute inset-0 overflow-hidden text-paper" data-drill-title={title}>
+      <SimulationDriver />
+      {tacticalEvacuee && <EvacueeConsole />}
+      {tacticalWarden && <WardenConsole view={view} setView={setView} />}
       <Briefing />
-
-      {/* top left: brand, location, objectives */}
-      <div className="safe-top pointer-events-none absolute left-3 top-0 z-10 flex max-w-[58vw] flex-col items-start gap-3 sm:left-4 sm:max-w-none">
-        <LocationHeader tag={tag} />
-        {evacueeHud ? (
-          // 19.5rem of checklist collides with the minimap on a 360px screen, so on a phone
-          // the list folds away and the objective the player is actually on is carried by
-          // the prompt and the narration instead
-          <PhoneCollapsible label="Objectives">
-            <ObjectivesPanel />
-          </PhoneCollapsible>
-        ) : (
-          <div className="hud-panel max-w-xs px-3 py-2 text-[11px] leading-snug text-paper/75">
-            {warden
-              ? `Warden station · watching ${roomById(watched ?? sector).name}. Verify before you message.`
-              : view === "warden"
-                ? "Warden view · drag to orbit, scroll to zoom. Press 1 for the evacuee."
-                : "Evidence view · click the markers to inspect. Press 1 for the evacuee."}
-          </div>
-        )}
-      </div>
-
-      {/* top right: status, menu, map, warden panels */}
-      <div className="safe-top pointer-events-none absolute right-3 top-0 z-10 flex max-h-[calc(100%-1.5rem)] max-w-[52vw] flex-col items-end gap-2 overflow-y-auto sm:right-4 sm:max-w-none">
-        <div className="pointer-events-auto flex flex-wrap items-center justify-end gap-2">
-          <ConnectionBadge />
-          {warden && (
-            <div className="flex overflow-hidden border-2 border-paper/30">
-              {(["warden", "evidence"] as ViewMode[]).map((id) => (
-                <button
-                  key={id}
-                  onClick={() => setView(id)}
-                  className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-widest ${view === id ? "bg-sun text-ink" : "bg-night/85 text-paper/65 hover:bg-paper/10"}`}
-                >
-                  {id === "warden" ? "Watch" : "Evidence"}
-                </button>
-              ))}
-            </div>
-          )}
-          <button
-            onClick={() => {
-              exitLock();
-              setPaused(true);
-            }}
-            className="flex items-center gap-2 border-2 border-paper/30 bg-night/85 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-paper hover:border-paper/70"
-            aria-label="Open the menu"
-          >
-            <span aria-hidden className="text-sun">
-              ❚❚
-            </span>
-            Menu
-          </button>
-        </div>
-        <Minimap />
-        {view !== "evacuee" && (
-          <PhoneCollapsible label="Evidence">
-            <EvidencePanel />
-          </PhoneCollapsible>
-        )}
-        {view !== "evacuee" && (
-          <PhoneCollapsible label="Log">
-            <Log />
-          </PhoneCollapsible>
-        )}
-      </div>
-
-      {/* alerts */}
-      <div className="pointer-events-none absolute inset-x-0 top-[34%] z-10 flex flex-col items-center gap-2 px-3 xl:top-4">
-        <HazardBanner />
-        <RouteMessageCard />
-      </div>
-
-      {warden && (
-        <div className="pointer-events-auto absolute inset-x-2 bottom-3 z-10 sm:inset-x-auto sm:bottom-4 sm:left-1/2 sm:-translate-x-1/2">
-          <CommandDeck />
-        </div>
-      )}
-
-      {/* bottom left: vitals */}
-      <div className={`pointer-events-none absolute left-3 z-10 sm:left-4 ${showStick ? "top-[40%]" : warden ? "bottom-[10rem] sm:bottom-4" : "bottom-3 sm:bottom-4"}`}>
-        {evacueeHud ? (
-          <Vitals />
-        ) : (
-          <div className="hud-panel hidden flex-col gap-2 p-3 sm:flex">
-            <Bar label="Evacuee health" value={health} color="var(--mint)" danger={health < 35} />
-            <Bar label="Evacuee air" value={air} color="#6fb8ff" danger={air < 35} />
-            <div className="flex flex-wrap gap-3 font-mono text-[10px] uppercase tracking-wider text-paper/60">
-              <span style={{ color: routeStatus === "unsafe" ? "var(--danger)" : routeStatus === "intervened" ? "var(--mint)" : "var(--sun)" }}>route / {routeStatus}</span>
-              <span>smoke / {Math.round(smoke * 100)}%</span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* bottom centre: narration, interaction prompt, controls */}
       {!warden && (
-        <div className={`pointer-events-none absolute inset-x-0 z-10 flex flex-col items-center gap-2 px-3 ${showStick ? "above-dock" : "bottom-3 sm:bottom-4"} ${view === "evacuee" ? "" : "hidden"}`}>
+        <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex justify-center px-3 sm:bottom-4">
           <NarrationCaption />
-          {!showStick && <PromptBar />}
-          {!touch && <div className="hidden lg:block"><ControlsHint /></div>}
-        </div>
-      )}
-
-      {view === "evacuee" && !showStick && (
-        <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-          <span className="block h-1.5 w-1.5 rounded-full bg-paper shadow-[0_0_0_2px_rgba(22,17,30,0.6)]" />
         </div>
       )}
       {showStick && <TouchControls />}

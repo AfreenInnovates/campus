@@ -29,11 +29,3 @@ export function pressUse() {
     playSignal("evidence");
   }
 }
-
-/** `Space` / the JUMP button: a small hop for route readability. */
-export function pressJump() {
-  const sim = useSimulation.getState();
-  if (sim.briefingStatus !== "complete" || sim.paused || sim.air <= 0 || sim.failed || sim.assemblyConfirmed) return;
-  runtime.jumpAt = performance.now();
-  playSignal("jump");
-}

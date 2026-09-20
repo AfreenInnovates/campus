@@ -27,6 +27,8 @@ type Subscriber = {
   settle: { resolve: () => void; reject: (error: Error) => void } | null;
 };
 
+export type SocketState = "connecting" | "connected" | "reconnecting" | "disconnected";
+
 export interface Subscription {
   /** Resolves on the first `subscribe_success`. */
   ready: Promise<void>;
@@ -46,11 +48,13 @@ export class EventsSocket {
   private ws: WebSocket | null = null;
   private ready = false;
   private closed = false;
+  private state: SocketState = "connecting";
   private attempts = 0;
   private timeoutMs = 300_000;
   private watchdog: ReturnType<typeof setTimeout> | null = null;
   private retry: ReturnType<typeof setTimeout> | null = null;
   private readonly subscribers = new Map<string, Subscriber>();
+  private readonly statusListeners = new Set<(state: SocketState) => void>();
   private readonly queue: string[] = [];
 
   constructor() {
@@ -88,6 +92,23 @@ export class EventsSocket {
     }
   }
 
+  onStatus(callback: (state: SocketState) => void) {
+    this.statusListeners.add(callback);
+    callback(this.state);
+    return () => this.statusListeners.delete(callback);
+  }
+
+  retryNow() {
+    if (this.closed) return;
+    this.clearTimers();
+    this.ready = false;
+    const ws = this.ws;
+    this.ws = null;
+    ws?.close();
+    this.setStatus("reconnecting");
+    this.open();
+  }
+
   close() {
     this.closed = true;
     this.ready = false;
@@ -97,9 +118,12 @@ export class EventsSocket {
     const ws = this.ws;
     this.ws = null;
     ws?.close();
+    this.setStatus("disconnected");
   }
 
   private open() {
+    if (this.closed) return;
+    this.setStatus("connecting");
     const ws = new WebSocket(REALTIME_URL, ["aws-appsync-event-ws", `header-${base64Url(authorization())}`]);
     this.ws = ws;
     ws.onopen = () => ws.send(JSON.stringify({ type: "connection_init" }));
@@ -126,6 +150,7 @@ export class EventsSocket {
         this.ready = true;
         this.attempts = 0;
         this.timeoutMs = message.connectionTimeoutMs ?? this.timeoutMs;
+        this.setStatus("connected");
         this.keepAlive();
         for (const [id, subscriber] of this.subscribers) this.sendSubscribe(id, subscriber.channel);
         for (const queued of this.queue.splice(0)) this.ws?.send(queued);
@@ -168,7 +193,7 @@ export class EventsSocket {
   }
 
   private send(message: object) {
-    this.ws?.send(JSON.stringify(message));
+    if (this.ready && this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(message));
   }
 
   /** AppSync sends `ka` every minute; a silent socket past the timeout is presumed dead. */
@@ -181,8 +206,15 @@ export class EventsSocket {
     this.ready = false;
     this.clearTimers();
     if (this.closed) return;
+    this.setStatus("reconnecting");
     const delay = Math.min(MAX_RETRY_MS, 500 * 2 ** this.attempts++) * (0.5 + Math.random() / 2);
     this.retry = setTimeout(() => this.open(), delay);
+  }
+
+  private setStatus(state: SocketState) {
+    if (this.state === state) return;
+    this.state = state;
+    for (const listener of this.statusListeners) listener(state);
   }
 
   private clearTimers() {

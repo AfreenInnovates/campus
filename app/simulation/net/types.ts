@@ -2,6 +2,14 @@ import type { EquipmentId, RoomId, ScenarioObjectId, ScenarioProgress } from "..
 import type { CommandCode } from "../commands";
 
 export type Role = "evacuee" | "warden";
+export type ConnectionState =
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "syncing"
+  | "disconnected"
+  | "expired";
+export type PresenceState = "connected" | "reconnecting" | "disconnected" | "expired";
 export type Phase =
   | "lobby"
   | "preparing"
@@ -38,6 +46,14 @@ export interface Participant {
   /** The authored sector feed assigned to a warden. */
   sectorId: RoomId | null;
   joinedAt: number;
+  /** Identifies the current browser connection so an old tab cannot evict a new one. */
+  connectionId?: string;
+  /** Orders replacement connections for the same participant. */
+  connectionStartedAt?: number;
+  /** Shared presence state; `connected` is retained for snapshots written by older clients. */
+  presence?: PresenceState;
+  /** Shared deadline used while a participant is reconnecting. */
+  reconnectUntil?: number | null;
   connected?: boolean;
 }
 
@@ -112,14 +128,15 @@ export interface LogEntry {
   tone: "info" | "good" | "bad";
 }
 
-/** What the evacuee browser publishes at the render rate. Never sent to the warden as-is. */
+/** What the evacuee browser publishes at the simulation rate. Never sent to the warden as-is. */
 export interface EvacueeState {
   kind: "evacuee";
   t: number;
   hazardElapsed: number;
   stateVersion: number;
   eventSequence: number;
-  position: [number, number, number, number];
+  /** x, z, heading in radians */
+  position: [number, number, number];
   sectorId: RoomId;
   air: number;
   health: number;
@@ -145,7 +162,8 @@ export interface WardenState {
   eventSequence: number;
   assignedSector: RoomId;
   evacuee: {
-    position: [number, number, number, number];
+    /** x, z, heading in radians */
+    position: [number, number, number];
     sectorId: RoomId;
   } | null;
   air: number;
@@ -198,7 +216,8 @@ export type JoinResult =
 
 /** The simulation speaks intents and receives role-scoped events; the transport owns the room. */
 export interface NetClient {
-  connect(code: string): Promise<void>;
+  connect(code: string, participant?: Participant): Promise<void>;
+  retry(): void;
   disconnect(): void;
   createRoom(room: DrillRoom): Promise<DrillRoom>;
   join(code: string, participant: Participant): Promise<JoinResult>;
@@ -208,6 +227,7 @@ export interface NetClient {
   /** Records a completed objective in the drill history. Fire and forget; drives no UI. */
   publishProgress(step: ScenarioObjectId, elapsed: number): void;
   onMessage(cb: (event: NetEvent) => void): () => void;
+  onStatus(cb: (state: ConnectionState) => void): () => void;
 }
 
 export const newCode = () => {
@@ -220,3 +240,9 @@ export const newCode = () => {
 
 export const newId = () =>
   `p_${Math.random().toString(36).slice(2, 9)}${Date.now().toString(36).slice(-4)}`;
+
+export const newConnectionId = () =>
+  `c_${Math.random().toString(36).slice(2, 9)}${Date.now().toString(36).slice(-4)}`;
+
+export const presenceOf = (participant: Participant): PresenceState =>
+  participant.presence ?? (participant.connected === false ? "disconnected" : "connected");

@@ -1,4 +1,3 @@
-import * as THREE from "three";
 import {
   EVACUEE_SPAWN,
   type EquipmentId,
@@ -6,27 +5,27 @@ import {
   type ScenarioObjectId,
 } from "./level";
 
-/** Keep physics stable when a tab wakes up after a frame hitch. */
+/** Keep the simulation stable when a tab wakes up after a frame hitch. */
 export const clampDt = (dt: number) => Math.min(dt, 0.05);
 
 /**
- * Per-frame state shared by the R3F systems. Durable drill state belongs to the
- * room authority; this object only holds render and input values.
+ * Ephemeral state shared by the 2D simulation loop. Durable drill state belongs
+ * to the room authority; this object only holds movement, input, and recovery values.
  */
 export const runtime = {
-  evacuee: new THREE.Vector3(...EVACUEE_SPAWN),
+  evacuee: { x: EVACUEE_SPAWN[0], z: EVACUEE_SPAWN[1] },
   evacueeYaw: 0,
   sector: "entry" as RoomId,
-  alert: 0,
   drillStartedAt: 0,
   hazardElapsed: 0,
-  briefingStatus: "locked" as "locked" | "playing" | "complete",
+  recoveryPosition: null as null | { x: number; z: number; yaw: number },
+  recoveryHazardElapsed: null as number | null,
   /** Authoritative evacuee transform received by a warden client. */
   netEvacuee: null as null | {
     x: number;
-    y: number;
     z: number;
     yaw: number;
+    sectorId: RoomId;
     hasBackpack: boolean;
     equipped: EquipmentId | null;
     scenarioProgress: Partial<Record<ScenarioObjectId, boolean>>;
@@ -38,9 +37,14 @@ export const runtime = {
   },
 
   /* input shared by keyboard and coarse-pointer controls */
-  jumpAt: -1e9,
+  keys: {
+    forward: false,
+    back: false,
+    left: false,
+    right: false,
+    sprint: false,
+  },
   touchMove: { x: 0, y: 0 },
   /** Thumb pushed to the edge of the stick: the touch equivalent of holding Shift. */
   touchSprint: false,
-  touchLook: { dx: 0, dy: 0 },
 };

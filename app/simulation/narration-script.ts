@@ -35,7 +35,7 @@ export const EVACUEE_BRIEFING = [
   "Welcome to CampusEvac. This is a fire drill. You are the evacuee, standing at the main entrance of the Science Block.",
   "You have six steps. Grab the backpack by the entrance. Then, in Chemistry Lab 1A, take the access card, close the gas valve, use the first-aid kit and read the safety note.",
   "Next, read the route guide in Classroom A201. When all six are done, return to the entrance and leave through the green exit doors.",
-  "Your steps are listed top left and the map is top right. W A S D to move, E to interact, V to change camera, Escape to pause. Smoke builds over time, so keep moving.",
+  "Your steps are listed beside the map. W A S D move, E interacts, and Escape pauses. Smoke builds over time, so keep moving.",
 ];
 
 /** Said once, the first time the evacuee walks into a place. */

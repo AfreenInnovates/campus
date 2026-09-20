@@ -3,11 +3,14 @@
 import { create } from "zustand";
 import type { CommandCode } from "./commands";
 import { createNet } from "./net";
+import { clearRecoverySnapshot } from "./net/recovery";
 import { setProgressPublisher } from "./store";
 import { resolveRoom } from "./net/roles";
 import {
   newId,
+  newConnectionId,
   type CommandAcknowledgement,
+  type ConnectionState,
   type DrillRoom,
   type EvacueeState,
   type JoinFailure,
@@ -20,7 +23,7 @@ import {
 
 export { resolveRoom } from "./net/roles";
 
-export type SessionStatus = "idle" | "connecting" | "connected" | JoinFailure;
+export type SessionStatus = "idle" | ConnectionState | JoinFailure;
 
 interface SessionState {
   net: NetClient | null;
@@ -47,6 +50,7 @@ const wardenStateSubs = new Set<(state: WardenState) => void>();
 const routeMessageSubs = new Set<(message: RouteMessage) => void>();
 const acknowledgementSubs = new Set<(acknowledgement: CommandAcknowledgement) => void>();
 let unsubscribe: (() => void) | null = null;
+let statusUnsubscribe: (() => void) | null = null;
 let unloadListener: (() => void) | null = null;
 
 const subscribe =
@@ -97,6 +101,9 @@ export const useSession = create<SessionState>()((set, get) => {
         role: null,
         sectorId: null,
         joinedAt: Date.now(),
+        connectionId: newConnectionId(),
+        connectionStartedAt: Date.now(),
+        presence: "connected",
         connected: true,
       };
 
@@ -104,6 +111,10 @@ export const useSession = create<SessionState>()((set, get) => {
 
       // only a joined room records progress; solo practice leaves this unset and publishes nothing
       setProgressPublisher((step, elapsed) => net.publishProgress(step, elapsed));
+
+      statusUnsubscribe = net.onStatus((connectionState: ConnectionState) => {
+        if (get().net === net) set({ status: connectionState });
+      });
 
       // A closed tab is otherwise only noticed after the presence timeout. This is best
       // effort — the browser may kill the socket first — so it shortens the common case
@@ -120,7 +131,12 @@ export const useSession = create<SessionState>()((set, get) => {
         switch (event.type) {
           case "room":
             if (event.room.code !== get().code) return;
-            set({ room: event.room, status: "connected", isHost: event.room.hostId === get().myId });
+            const currentStatus = get().status;
+            set({
+              room: event.room,
+              status: currentStatus === "connecting" ? "connected" : currentStatus,
+              isHost: event.room.hostId === get().myId,
+            });
             break;
           case "warden-state":
             for (const callback of wardenStateSubs) callback(event.state);
@@ -138,11 +154,13 @@ export const useSession = create<SessionState>()((set, get) => {
         net.disconnect();
         unsubscribe?.();
         unsubscribe = null;
+        statusUnsubscribe?.();
+        statusUnsubscribe = null;
         set({ status, net: null });
       };
 
       try {
-        await net.connect(code);
+        await net.connect(code, participant);
         if (seedRoom) await net.createRoom({ ...seedRoom, drillId: seedRoom.drillId || `drill_${code}`, hostId: "" });
       } catch (error) {
         const message = error instanceof Error ? error.message.toLowerCase() : "";
@@ -179,6 +197,7 @@ export const useSession = create<SessionState>()((set, get) => {
     leave: () => {
       const { net, myId, code } = get();
       if (net && myId && code) net.leave(code, myId);
+      if (code) clearRecoverySnapshot(code);
       get().disconnect();
     },
 
@@ -188,6 +207,8 @@ export const useSession = create<SessionState>()((set, get) => {
       unloadListener = null;
       unsubscribe?.();
       unsubscribe = null;
+      statusUnsubscribe?.();
+      statusUnsubscribe = null;
       get().net?.disconnect();
       wardenStateSubs.clear();
       routeMessageSubs.clear();

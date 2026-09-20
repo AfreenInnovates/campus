@@ -1,4 +1,4 @@
-export type Vec3 = [number, number, number];
+export type Point = [number, number];
 
 /* The compact authored block. IDs are stable across render, collision, and events. */
 export type RoomId =
@@ -30,13 +30,10 @@ export interface ScenarioObjectDef {
   room: RoomId;
   label: string;
   sub: string;
-  position: Vec3;
+  position: Point;
   color: string;
   radius: number;
 }
-
-export const WALL_T = 0.3;
-export const ROOM_H = 3.8;
 
 export interface Bounds {
   minX: number;
@@ -50,9 +47,6 @@ export interface RoomDef {
   name: string;
   blurb: string;
   bounds: Bounds;
-  fog: boolean;
-  floor: string;
-  cam: { pos: Vec3; target: Vec3 };
 }
 
 /**
@@ -65,72 +59,48 @@ export const ROOMS: RoomDef[] = [
     name: "Plaza / Assembly Point",
     blurb: "Safe staging area with the assembly beacon ahead.",
     bounds: { minX: -14, maxX: 14, minZ: 10.5, maxZ: 26 },
-    fog: false,
-    floor: "#2c2f33",
-    cam: { pos: [0, 15, 33], target: [0, 2, 3] },
   },
   {
     id: "entry",
     name: "Main Entrance",
     blurb: "Notice wall and orientation point for the drill.",
     bounds: { minX: -3, maxX: 3, minZ: 7, maxZ: 10.5 },
-    fog: false,
-    floor: "#6e6a63",
-    cam: { pos: [0, 11, 26], target: [0, 1.6, 6] },
   },
   {
     id: "lobby",
     name: "Central Corridor",
     blurb: "Primary route decision between the west and east stairs.",
     bounds: { minX: -5.5, maxX: 5.5, minZ: -7, maxZ: 7 },
-    fog: true,
-    floor: "#7b7770",
-    cam: { pos: [0, 19.9, 14], target: [0, 0.6, 0] },
   },
   {
     id: "wcorr",
     name: "Science Block / Passage",
     blurb: "Candidate route to the outdoor assembly point.",
     bounds: { minX: -8, maxX: -5.5, minZ: 1, maxZ: 4 },
-    fog: false,
-    floor: "#6e6a63",
-    cam: { pos: [-7, 9, 18], target: [-7, 1.4, 2] },
   },
   {
     id: "ecorr",
     name: "Academic Block / Passage",
     blurb: "Route edge that becomes unsafe during the scenario.",
     bounds: { minX: 5.5, maxX: 8, minZ: 1, maxZ: 4 },
-    fog: false,
-    floor: "#6e6a63",
-    cam: { pos: [7, 9, 18], target: [7, 1.4, 2] },
   },
   {
     id: "sec",
     name: "Science Block / Chemistry Lab 1A",
     blurb: "Gas control, safety equipment, and the west exit route.",
     bounds: { minX: -22, maxX: -8, minZ: -7, maxZ: 7 },
-    fog: true,
-    floor: "#78746d",
-    cam: { pos: [-1, 19.9, 0], target: [-15, 0.6, 0] },
   },
   {
     id: "vault",
     name: "Academic Block / Classroom A201",
     blurb: "Emergency guide, classroom clues, and the east route.",
     bounds: { minX: 8, maxX: 22, minZ: -7, maxZ: 7 },
-    fog: true,
-    floor: "#78746d",
-    cam: { pos: [1, 19.9, 0], target: [15, 0.6, 0] },
   },
   {
     id: "annex",
     name: "Academic Block / Electrical Service",
     blurb: "Authored smoke origin and recovery route.",
     bounds: { minX: 13, maxX: 17, minZ: -10, maxZ: -7 },
-    fog: false,
-    floor: "#5d5a55",
-    cam: { pos: [15, 9, 14], target: [15, 1.4, -7] },
   },
 ];
 
@@ -156,7 +126,6 @@ export function roomAt(x: number, z: number): RoomId {
 export interface Opening {
   at: number;
   width: number;
-  height?: number;
 }
 
 export interface WallDef {
@@ -166,8 +135,6 @@ export interface WallDef {
   from: number;
   to: number;
   openings?: Opening[];
-  height?: number;
-  cutaway?: boolean;
   color?: string;
 }
 
@@ -182,7 +149,7 @@ export const WALLS: WallDef[] = [
     from: -22.15,
     to: 22.15,
     color: OUT,
-    openings: [{ at: 15, width: 3.6, height: 2.9 }],
+    openings: [{ at: 15, width: 3.6 }],
   },
   { id: "w-west", axis: "z", fixed: -22, from: -7.15, to: 7.15, color: OUT },
   { id: "w-east", axis: "z", fixed: 22, from: -7.15, to: 7.15, color: OUT },
@@ -193,7 +160,6 @@ export const WALLS: WallDef[] = [
     from: -22.15,
     to: -3,
     color: OUT,
-    cutaway: true,
   },
   {
     id: "w-south-e",
@@ -202,7 +168,6 @@ export const WALLS: WallDef[] = [
     from: 3,
     to: 22.15,
     color: OUT,
-    cutaway: true,
   },
   { id: "w-entry-w", axis: "z", fixed: -3, from: 7, to: 10.65, color: OUT },
   { id: "w-entry-e", axis: "z", fixed: 3, from: 7, to: 10.65, color: OUT },
@@ -212,9 +177,8 @@ export const WALLS: WallDef[] = [
     fixed: 10.5,
     from: -3.15,
     to: 3.15,
-    height: 3.2,
     color: OUT,
-    openings: [{ at: 0, width: 3, height: 2.6 }],
+    openings: [{ at: 0, width: 3 }],
   },
   { id: "w-annex-w", axis: "z", fixed: 13, from: -10.15, to: -7, color: OUT },
   { id: "w-annex-e", axis: "z", fixed: 17, from: -10.15, to: -7, color: OUT },
@@ -226,7 +190,7 @@ export const WALLS: WallDef[] = [
     from: -7,
     to: 7,
     color: IN,
-    openings: [{ at: 2.5, width: 1.6, height: 2.4 }],
+    openings: [{ at: 2.5, width: 1.6 }],
   },
   {
     id: "w-lobby-w",
@@ -235,7 +199,7 @@ export const WALLS: WallDef[] = [
     from: -7,
     to: 7,
     color: IN,
-    openings: [{ at: 2.5, width: 1.6, height: 2.4 }],
+    openings: [{ at: 2.5, width: 1.6 }],
   },
   {
     id: "w-lobby-e",
@@ -244,7 +208,7 @@ export const WALLS: WallDef[] = [
     from: -7,
     to: 7,
     color: IN,
-    openings: [{ at: 2.5, width: 1.6, height: 2.4 }],
+    openings: [{ at: 2.5, width: 1.6 }],
   },
   {
     id: "w-vault-w",
@@ -253,7 +217,7 @@ export const WALLS: WallDef[] = [
     from: -7,
     to: 7,
     color: IN,
-    openings: [{ at: 2.5, width: 1.6, height: 2.4 }],
+    openings: [{ at: 2.5, width: 1.6 }],
   },
 ];
 
@@ -264,32 +228,16 @@ export const MASSES: { x1: number; z1: number; x2: number; z2: number }[] = [
   { x1: 5.5, z1: 4, x2: 8, z2: 7.15 },
 ];
 
-export const SLABS: {
-  id: string;
-  x1: number;
-  z1: number;
-  x2: number;
-  z2: number;
-  color: string;
-  ceiling?: boolean;
-}[] = [
-  { id: "main", x1: -22.15, z1: -7.15, x2: 22.15, z2: 7.15, color: "#d2c8d8", ceiling: true },
-  { id: "entry", x1: -3.15, z1: 7.15, x2: 3.15, z2: 10.65, color: "#cfc3d2", ceiling: true },
-  { id: "annex", x1: 12.85, z1: -10.15, x2: 17.15, z2: -7, color: "#b5aab9", ceiling: true },
-];
-
 /* ------------------------------------------------------------------- doors */
 
 export interface DoorDef {
   id: string;
   label: string;
   room: RoomId;
-  at: Vec3;
+  at: Point;
   axis: "x" | "z";
   width: number;
-  height: number;
   color: string;
-  swing: 1 | -1;
 }
 
 export const DOORS: DoorDef[] = [
@@ -297,23 +245,19 @@ export const DOORS: DoorDef[] = [
     id: "door-utility",
     label: "Utility access door",
     room: "wcorr",
-    at: [-8, 0, 2.5],
+    at: [-8, 2.5],
     axis: "z",
     width: 1.6,
-    height: 2.4,
     color: "#38bdf8",
-    swing: 1,
   },
   {
     id: "door-dorm",
     label: "Dorm wing access door",
     room: "ecorr",
-    at: [5.5, 0, 2.5],
+    at: [5.5, 2.5],
     axis: "z",
     width: 1.6,
-    height: 2.4,
     color: "#facc15",
-    swing: -1,
   },
 ];
 
@@ -325,7 +269,7 @@ export const SCENARIO_OBJECTS: ScenarioObjectDef[] = [
     room: "entry",
     label: "Emergency backpack",
     sub: "grab it before entering the block",
-    position: [1.55, 0.3, 8.65],
+    position: [1.55, 8.65],
     color: "#38bdf8",
     radius: 1.55,
   },
@@ -335,7 +279,7 @@ export const SCENARIO_OBJECTS: ScenarioObjectDef[] = [
     room: "sec",
     label: "Lab access card",
     sub: "opens the marked exit",
-    position: [-9.65, 0.98, 2.55],
+    position: [-9.65, 2.55],
     color: "#facc15",
     radius: 1.5,
   },
@@ -345,7 +289,7 @@ export const SCENARIO_OBJECTS: ScenarioObjectDef[] = [
     room: "sec",
     label: "Gas isolation valve",
     sub: "close the valve before crossing the lab",
-    position: [-19.45, 1.12, -4.35],
+    position: [-19.45, -4.35],
     color: "#ef4444",
     radius: 1.55,
   },
@@ -355,7 +299,7 @@ export const SCENARIO_OBJECTS: ScenarioObjectDef[] = [
     room: "sec",
     label: "First-aid kit",
     sub: "use on pickup / one charge",
-    position: [-20.5, 1.05, 4.75],
+    position: [-20.5, 4.75],
     color: "#fb7185",
     radius: 1.4,
   },
@@ -365,7 +309,7 @@ export const SCENARIO_OBJECTS: ScenarioObjectDef[] = [
     room: "sec",
     label: "Lab safety clue",
     sub: "decode the marked west route",
-    position: [-13.7, 1.12, -1.8],
+    position: [-13.7, -1.8],
     color: "#10b981",
     radius: 1.35,
   },
@@ -375,7 +319,7 @@ export const SCENARIO_OBJECTS: ScenarioObjectDef[] = [
     room: "vault",
     label: "Emergency route guide",
     sub: "compare the classroom map with the signs",
-    position: [12.2, 0.8, 1.25],
+    position: [12.2, 1.25],
     color: "#a78bfa",
     radius: 1.35,
   },
@@ -385,7 +329,7 @@ export const SCENARIO_OBJECTS: ScenarioObjectDef[] = [
     room: "entry",
     label: "Marked exit",
     sub: "all critical steps must be complete",
-    position: [0, 1.15, 10.2],
+    position: [0, 10.2],
     color: "#39ff88",
     radius: 1.6,
   },
@@ -441,7 +385,7 @@ export const SPECTATOR_THREATS = [
   {
     id: "gas-cloud",
     room: "sec" as RoomId,
-    position: [-19.45, 1.35, -4.35] as Vec3,
+    position: [-19.45, -4.35] as Point,
     label: "UNSEEN GAS LEAK",
     sub: "evacuee has no direct visual confirmation",
     color: "#ef4444",
@@ -449,7 +393,7 @@ export const SPECTATOR_THREATS = [
   {
     id: "east-structural-risk",
     room: "ecorr" as RoomId,
-    position: [5.62, 1.65, 2.5] as Vec3,
+    position: [5.62, 2.5] as Point,
     label: "STRUCTURAL RISK",
     sub: "route becomes unsafe after the event escalates",
     color: "#facc15",
@@ -469,9 +413,8 @@ export interface MarkerDef {
   reveal: Reveal;
   room: RoomId;
   color: string;
-  position: Vec3;
-  labelOffset?: Vec3;
-  rotationY?: number;
+  position: Point;
+  labelOffset?: Point;
   source?: string;
   nextAction?: string;
 }
@@ -494,8 +437,8 @@ export const MARKERS: MarkerDef[] = [
     reveal: "evidence",
     room: "sec",
     color: C.red,
-    position: [-11.2, 1.3, 0.2],
-    labelOffset: [0, 0.75, 0],
+    position: [-11.2, 0.2],
+    labelOffset: [0, 0.75],
     source: "Utility sector sensor feed",
     nextAction: "Verify before sending route guidance.",
   },
@@ -507,8 +450,8 @@ export const MARKERS: MarkerDef[] = [
     reveal: "evidence",
     room: "sec",
     color: C.yellow,
-    position: [-19, 1.1, -4],
-    labelOffset: [0, 0.75, 0],
+    position: [-19, -4],
+    labelOffset: [0, 0.75],
     source: "Electrical service monitor",
     nextAction: "Compare the source with the route status.",
   },
@@ -520,8 +463,8 @@ export const MARKERS: MarkerDef[] = [
     reveal: "warden",
     room: "sec",
     color: C.blue,
-    position: [-12.2, 2, -6.8],
-    labelOffset: [0, 0.85, 0],
+    position: [-12.2, -6.8],
+    labelOffset: [0, 0.85],
     source: "Utility control panel",
     nextAction: "Apply only after the route evidence is verified.",
   },
@@ -533,18 +476,15 @@ export const MARKERS: MarkerDef[] = [
     reveal: "warden",
     room: "lobby",
     color: C.green,
-    position: [-2.2, 2.5, 6.7],
-    labelOffset: [0, 0.7, 0],
+    position: [-2.2, 6.7],
+    labelOffset: [0, 0.7],
     source: "Physical route signage",
     nextAction: "Send the west route when the block is verified.",
   },
 ];
 
-export const EVACUEE_SPAWN: Vec3 = [0, 1.1, 9];
+export const EVACUEE_SPAWN: Point = [0, 9];
 export const ASSEMBLY_Z = 13.5;
-
-/** Low sunset sun, behind the block to the north-east. Shared by the sky, key light and environment. */
-export const SUN_DIRECTION: Vec3 = [0.5, 0.2, -0.84];
 
 export function isRevealed(
   reveal: Reveal,

@@ -10,7 +10,6 @@ import {
   CheckmarkBadge01Icon,
   ClipboardListIcon,
   Database01Icon,
-  Diamond01Icon,
   DiceIcon,
   DoorOpenIcon,
   EyeIcon,
@@ -29,21 +28,13 @@ import {
   WifiConnected01Icon,
   WorkoutRunIcon,
 } from "@hugeicons/core-free-icons";
-import { DepthScene, Reveal, Tilt } from "./components/Depth";
+import { Reveal } from "./components/Depth";
+import PixelMapPreview from "./components/PixelMapPreview";
 import mascotImg from "../public/mascot.webp";
-import facilityImg from "../public/facility.webp";
 
 /* -- content ------------------------------------------------------------ */
 
-const TICKER = [
-  "Two players",
-  "One building",
-  "Smoke reaches the east route at 52 seconds",
-  "The warden sees what you can't",
-  "No game server",
-  "Runs in a browser tab",
-  "Training simulation only",
-];
+
 
 const STATS = [
   { value: "2", unit: "roles", label: "Evacuee inside, warden above", tone: "bg-sun", icon: UserGroupIcon },
@@ -78,7 +69,7 @@ const STACK = [
 
 export default function Home() {
   return (
-    <main className="brutal-grid relative min-h-0 flex-1 overflow-y-auto text-ink">
+    <main className="ce-landing brutal-grid relative min-h-0 flex-1 overflow-y-auto text-ink">
       {/* --------------- NAV --------------- */}
       <nav className="sticky top-0 z-30 border-b-[3px] border-ink bg-paper/95 backdrop-blur">
         <div className="mx-auto flex max-w-[1200px] items-center justify-between gap-4 px-5 py-3 sm:px-8">
@@ -108,26 +99,11 @@ export default function Home() {
         </div>
       </nav>
 
-      {/* --------------- TICKER --------------- */}
-      <div className="brutal-ticker" aria-hidden>
-        <div className="brutal-ticker__track">
-          {[0, 1].map((copy) => (
-            <div key={copy} className="flex shrink-0 items-center">
-              {TICKER.map((item) => (
-                <span key={item} className="flex items-center gap-5 whitespace-nowrap px-5 py-2 text-[11px] font-black uppercase tracking-[0.2em] text-paper">
-                  {item}
-                  <HugeiconsIcon icon={Diamond01Icon} size={13} strokeWidth={2.8} className="text-sun" />
-                </span>
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
 
       <div className="mx-auto max-w-[1200px] px-5 sm:px-8">
         {/* --------------- HERO --------------- */}
-        <DepthScene className="grid items-center gap-12 py-12 lg:grid-cols-[1.05fr_0.95fr] lg:py-16">
-          <div className="depth-layer flex flex-col items-start" style={{ "--depth": 0.4 } as React.CSSProperties}>
+        <div className="grid items-center gap-12 py-12 lg:grid-cols-[1.05fr_0.95fr] lg:py-16">
+          <div className="flex flex-col items-start">
             <div className="mb-6 flex flex-wrap items-center gap-3">
               <span className="brutal-sticker bg-ink text-sun -rotate-2">
                 <HugeiconsIcon icon={AlarmSmokeIcon} size={15} strokeWidth={2.6} />
@@ -135,7 +111,7 @@ export default function Home() {
               </span>
               <span className="brutal-sticker bg-paper-light rotate-1">
                 <HugeiconsIcon icon={EyeIcon} size={15} strokeWidth={2.6} />
-                3D in the browser
+                2D tactical map
               </span>
             </div>
 
@@ -171,8 +147,8 @@ export default function Home() {
           </div>
 
           <div className="relative mx-auto w-full max-w-xl lg:max-w-none">
-            <Tilt className="brutal-screen tilt-shadow-coral" max={6}>
-              <div className="flex items-center justify-between border-b-[3px] border-ink bg-ink px-3 py-2 text-[9px] font-black uppercase tracking-[0.2em] text-paper">
+             <div className="brutal-screen ce-preview-frame">
+               <div className="flex items-center justify-between border-b-[3px] border-ink bg-ink px-3 py-2 text-[9px] font-black uppercase tracking-[0.2em] text-paper">
                 <span className="flex items-center gap-2">
                   <HugeiconsIcon icon={CctvCameraIcon} size={14} strokeWidth={2.6} className="text-sun" />
                   Science Block / Level 1
@@ -181,34 +157,18 @@ export default function Home() {
                   <span className="signal-pulse h-1.5 w-1.5 rounded-full bg-mint" /> drill live
                 </span>
               </div>
-              <Image
-                src={facilityImg}
-                alt="Cutaway view of the campus block: a student running through a smoke-filled corridor toward the assembly beacon, watched from a console."
-                className="h-auto w-full"
-                sizes="(max-width: 1024px) 100vw, 560px"
-                priority
-              />
-            </Tilt>
+               <PixelMapPreview />
+             </div>
 
-            <span
-              className="brutal-sticker depth-layer absolute -bottom-4 left-4 rotate-[-3deg] bg-sun sm:left-8"
-              style={{ "--depth": 2.2 } as React.CSSProperties}
-            >
+             <span
+               className="brutal-sticker absolute -bottom-4 left-4 rotate-[-3deg] bg-sun sm:left-8"
+             >
               <HugeiconsIcon icon={Megaphone01Icon} size={14} strokeWidth={2.6} />
               Talk them out
             </span>
 
-            <Image
-              src={mascotImg}
-              alt=""
-              width={188}
-              height={254}
-              className="depth-layer pointer-events-none absolute -left-20 top-16 hidden rotate-[-6deg] drop-shadow-[6px_6px_0_rgba(29,22,38,0.22)] xl:block"
-              style={{ "--depth": 3 } as React.CSSProperties}
-              priority
-            />
-          </div>
-        </DepthScene>
+           </div>
+        </div>
 
         {/* --------------- STATS --------------- */}
         <Reveal>
@@ -247,10 +207,10 @@ export default function Home() {
 
           <ol className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {STEPS.map((step, index) => (
-              <li key={step.n} className="[perspective:900px]">
-                <Reveal delay={index * 90}>
-                  <Tilt className="brutal-card tilt-shadow flex h-full flex-col p-6">
-                    <div className="tilt-raise flex items-center justify-between">
+             <li key={step.n}>
+               <Reveal delay={index * 90}>
+                  <div className="brutal-card flex h-full flex-col p-6">
+                    <div className="flex items-center justify-between">
                       <span className="brutal-num font-mono text-5xl font-black leading-none">{step.n}</span>
                       <span className="grid h-11 w-11 place-items-center border-[3px] border-ink bg-sun shadow-[3px_3px_0_var(--ink)]">
                         <HugeiconsIcon icon={step.icon} size={22} strokeWidth={2.3} />
@@ -258,7 +218,7 @@ export default function Home() {
                     </div>
                     <h3 className="mt-4 text-base font-black uppercase tracking-wide">{step.title}</h3>
                     <p className="mt-2 text-sm leading-relaxed text-ink-soft">{step.body}</p>
-                  </Tilt>
+                  </div>
                 </Reveal>
               </li>
             ))}
@@ -266,9 +226,9 @@ export default function Home() {
         </section>
 
         {/* --------------- ROLES --------------- */}
-        <section id="roles" className="scroll-mt-20 grid gap-8 pb-16 lg:grid-cols-2 [perspective:1100px]">
+        <section id="roles" className="scroll-mt-20 grid gap-8 pb-16 lg:grid-cols-2">
           <Reveal>
-          <Tilt className="brutal-slab tilt-shadow-violet h-full bg-paper-light p-7" max={5}>
+          <div className="brutal-slab h-full bg-paper-light p-7">
             <div className="flex items-start justify-between gap-4">
               <span className="brutal-sticker bg-violet text-paper -rotate-2">Role 01</span>
               <HugeiconsIcon icon={WorkoutRunIcon} size={44} strokeWidth={2} className="text-violet" />
@@ -281,18 +241,18 @@ export default function Home() {
             <ul className="mt-6 grid gap-2.5 text-[12px] font-black uppercase tracking-wide">
               <li className="flex items-center gap-2.5 border-l-[5px] border-violet pl-3">
                 <HugeiconsIcon icon={KeyboardIcon} size={17} strokeWidth={2.4} className="shrink-0 text-violet" />
-                WASD move / Space jump / E interact
+                WASD move / Shift sprint / E interact
               </li>
               <li className="flex items-center gap-2.5 border-l-[5px] border-violet pl-3">
                 <HugeiconsIcon icon={Mouse01Icon} size={17} strokeWidth={2.4} className="shrink-0 text-violet" />
-                V switches camera / Esc opens the menu
+                Use the map / Esc opens the menu
               </li>
             </ul>
-          </Tilt>
+          </div>
           </Reveal>
 
           <Reveal delay={120}>
-          <Tilt className="brutal-slab tilt-shadow-coral h-full bg-night p-7 text-paper" max={5}>
+          <div className="brutal-slab h-full bg-night p-7 text-paper">
             <div className="flex items-start justify-between gap-4">
               <span className="brutal-sticker border-paper bg-coral text-ink rotate-2">Role 02</span>
               <HugeiconsIcon icon={CctvCameraIcon} size={44} strokeWidth={2} className="text-coral" />
@@ -318,7 +278,7 @@ export default function Home() {
                 One intervention per drill
               </li>
             </ul>
-          </Tilt>
+          </div>
           </Reveal>
         </section>
 

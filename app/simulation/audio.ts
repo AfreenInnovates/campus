@@ -1,4 +1,4 @@
-type Signal = "command" | "alert" | "evidence" | "jump";
+type Signal = "command" | "alert" | "evidence";
 
 let context: AudioContext | null = null;
 let unlockBound = false;
@@ -39,17 +39,15 @@ export function playSignal(signal: Signal) {
   const frequencies =
     signal === "alert"
       ? [110, 82]
-      : signal === "jump"
-        ? [150, 210]
       : signal === "evidence"
         ? [520, 760]
         : [240, 420];
-  const duration = signal === "alert" ? 0.22 : signal === "jump" ? 0.08 : 0.1;
+  const duration = signal === "alert" ? 0.22 : 0.1;
 
   frequencies.forEach((frequency, index) => {
     const oscillator = audio.createOscillator();
     const gain = audio.createGain();
-    oscillator.type = signal === "alert" ? "sawtooth" : signal === "jump" ? "triangle" : "square";
+    oscillator.type = signal === "alert" ? "sawtooth" : "square";
     const start = now + index * duration * 0.8;
     oscillator.frequency.setValueAtTime(frequency, start);
     gain.gain.setValueAtTime(0.0001, start);

@@ -5,8 +5,8 @@ import { useSyncExternalStore } from "react";
 /**
  * True on a device whose primary pointer is a finger.
  *
- * Drives which control scheme the evacuee gets: pointer lock and a mouse on a
- * desktop, an on-screen stick and a look pad on a phone. Read through
+ * Drives which control scheme the evacuee gets: keyboard on a desktop and an
+ * on-screen movement stick on a phone. Read through
  * useSyncExternalStore so the server render and the first client render agree
  * (the server has no idea what is holding the device, so it says "not coarse").
  */
