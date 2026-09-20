@@ -80,4 +80,68 @@ CampusEvac turns evacuation training from a once-a-semester disruption into some
 
 ### Status
 
-Built for AWS First Commit. The core loop - lobby, sync, drill, verification, report - is fully working end to end.
+Built for AWS x [WeMakeDevs](https://www.wemakedevs.org/). The core loop - lobby, sync, drill, verification, report - is fully working end to end.
+
+### Images
+
+<p align="center">
+  <img src="image1.png" alt="Narration">
+  <br>
+  <i>Narration</i>
+</p>
+
+<br><br>
+
+<p align="center">
+  <img src="image2.png" alt="Moving to classroom">
+  <br>
+  <i>Moving to classroom</i>
+</p>
+
+<br><br>
+
+<p align="center">
+  <img src="image3.png" alt="Next objective">
+  <br>
+  <i>Next objective</i>
+</p>
+
+<br><br>
+
+<p align="center">
+  <img src="image4.png" alt="Got out safely">
+  <br>
+  <i>Got out safely</i>
+</p>
+
+<br><br>
+
+<p align="center">
+  <img src="image5.png" alt="Report">
+  <br>
+  <i>Report</i>
+</p>
+
+<br><br>
+
+<p align="center">
+  <img src="image6.png" alt="Report">
+  <br>
+  <i>Report</i>
+</p>
+
+<br><br>
+
+<p align="center">
+  <img src="image7.png" alt="Evacuee view">
+  <br>
+  <i>Evacuee view</i>
+</p>
+
+<br><br>
+
+<p align="center">
+  <img src="image8.png" alt="Warden view">
+  <br>
+  <i>Warden view</i>
+</p>
