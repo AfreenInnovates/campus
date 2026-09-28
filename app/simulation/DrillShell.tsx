@@ -7,6 +7,7 @@ import Minimap from "./components/Minimap";
 import TouchControls from "./components/TouchControls";
 import { useCoarsePointer } from "./useCoarsePointer";
 import { setGraphicsQuality, useGraphicsQuality } from "./graphics";
+import { enterLandscape } from "./orientation";
 import {
   CRITICAL_SCENARIO_OBJECTS,
   nextScenarioGuidance,
@@ -971,6 +972,7 @@ function EndCard({ onReset, onLeave, onHome }: { onReset: () => void; onLeave: (
   const room = useSession((state) => state.room);
   const code = useSession((state) => state.code);
   const abandoned = resolveRoom(room)?.outcome === "participant-left";
+  const touch = useCoarsePointer();
   if (!complete && !failed) return null;
   const done = CRITICAL_SCENARIO_OBJECTS.filter((id) => progress[id]).length;
   const coordination = abandoned
@@ -998,57 +1000,73 @@ function EndCard({ onReset, onLeave, onHome }: { onReset: () => void; onLeave: (
     ["Where did coordination slip?", coordination, "var(--sun)"],
     ["What do we practise next?", practice, "var(--violet)"],
   ];
+  const actions = (
+    <div className={`grid gap-3 ${touch ? "mt-3 grid-cols-2" : "mt-6 sm:grid-cols-2"}`}>
+      {solo ? (
+        <button
+          onClick={() => {
+            reset();
+            onReset();
+          }}
+          className={`brutal-button px-4 ${touch ? "py-2" : "py-3"}`}
+        >
+          Play again
+        </button>
+      ) : (
+        <button onClick={onLeave} className={`brutal-button px-4 ${touch ? "py-2" : "py-3"}`}>
+          Back to lobby
+        </button>
+      )}
+      <button onClick={onHome} className={`brutal-button px-4 ${touch ? "py-2" : "py-3"}`} style={{ background: "var(--paper-light)" }}>
+        Exit to home
+      </button>
+    </div>
+  );
   return (
-    <div className="pointer-events-auto absolute inset-0 z-50 grid place-items-center overflow-y-auto bg-night/75 p-4 backdrop-blur-sm">
-      <section role="dialog" aria-modal="true" aria-labelledby="end-title" className="brutal-panel w-full max-w-lg p-5 text-ink sm:p-7">
-        <span className={`brutal-tag ${complete ? "bg-mint" : "bg-coral"}`}>{complete ? "Drill complete" : "Drill ended"}</span>
-        <h2 id="end-title" className="mt-3 text-4xl font-black uppercase leading-[0.95] tracking-[-0.05em]">
-          {complete ? (warden ? "They got out safely." : "You got out safely.") : abandoned ? "A player did not return." : "Not this time."}
-        </h2>
-        <dl className="mt-5 grid grid-cols-3 border-2 border-ink bg-paper">
-          {(
-            [
-              ["Time", formatTime(elapsed)],
-              ["Steps", `${done}/${CRITICAL_SCENARIO_OBJECTS.length}`],
-              ["Health", String(Math.round(health))],
-            ] as const
-          ).map(([label, value], index) => (
-            <div key={label} className={`p-3 ${index ? "border-l-2 border-ink" : ""}`}>
-              <dt className="text-[9px] font-black uppercase tracking-[0.18em] text-ink-soft">{label}</dt>
-              <dd className="mt-1 font-mono text-2xl font-black">{value}</dd>
+    <div className={`pointer-events-auto absolute inset-0 z-50 grid place-items-center overflow-y-auto bg-night/75 backdrop-blur-sm ${touch ? "p-2" : "p-4"}`}>
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="end-title"
+        className={`brutal-panel w-full text-ink ${touch ? "max-w-3xl p-4" : "max-w-lg p-5 sm:p-7"}`}
+      >
+        {/* sideways on a phone: result and actions on the left, the debrief beside them */}
+        <div className={touch ? "grid grid-cols-2 gap-4" : ""}>
+          <div>
+            <span className={`brutal-tag ${complete ? "bg-mint" : "bg-coral"}`}>{complete ? "Drill complete" : "Drill ended"}</span>
+            <h2 id="end-title" className={`mt-3 font-black uppercase leading-[0.95] tracking-[-0.05em] ${touch ? "text-2xl" : "text-4xl"}`}>
+              {complete ? (warden ? "They got out safely." : "You got out safely.") : abandoned ? "A player did not return." : "Not this time."}
+            </h2>
+            <dl className={`grid grid-cols-3 border-2 border-ink bg-paper ${touch ? "mt-3" : "mt-5"}`}>
+              {(
+                [
+                  ["Time", formatTime(elapsed)],
+                  ["Steps", `${done}/${CRITICAL_SCENARIO_OBJECTS.length}`],
+                  ["Health", String(Math.round(health))],
+                ] as const
+              ).map(([label, value], index) => (
+                <div key={label} className={`${touch ? "p-2" : "p-3"} ${index ? "border-l-2 border-ink" : ""}`}>
+                  <dt className="text-[9px] font-black uppercase tracking-[0.18em] text-ink-soft">{label}</dt>
+                  <dd className={`mt-1 font-mono font-black ${touch ? "text-lg" : "text-2xl"}`}>{value}</dd>
+                </div>
+              ))}
+            </dl>
+            {touch && actions}
+          </div>
+          <div>
+            <div className={touch ? "space-y-2" : "mt-5 space-y-3"}>
+              {debrief.map(([question, answer, color]) => (
+                <div key={question} className="border-l-4 pl-3" style={{ borderColor: color }}>
+                  <div className="text-[10px] font-black uppercase tracking-[0.16em]">{question}</div>
+                  <div className={`mt-0.5 text-ink-soft ${touch ? "text-[12px] leading-snug" : "text-sm"}`}>{answer}</div>
+                </div>
+              ))}
             </div>
-          ))}
-        </dl>
-        <div className="mt-5 space-y-3">
-          {debrief.map(([question, answer, color]) => (
-            <div key={question} className="border-l-4 pl-3" style={{ borderColor: color }}>
-              <div className="text-[10px] font-black uppercase tracking-[0.16em]">{question}</div>
-              <div className="mt-0.5 text-sm text-ink-soft">{answer}</div>
-            </div>
-          ))}
+            {!solo && <VerificationBadge code={code} />}
+            <ReportMailer />
+          </div>
         </div>
-        {!solo && <VerificationBadge code={code} />}
-        <ReportMailer />
-        <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          {solo ? (
-            <button
-              onClick={() => {
-                reset();
-                onReset();
-              }}
-              className="brutal-button px-4 py-3"
-            >
-              Play again
-            </button>
-          ) : (
-            <button onClick={onLeave} className="brutal-button px-4 py-3">
-              Back to lobby
-            </button>
-          )}
-          <button onClick={onHome} className="brutal-button px-4 py-3" style={{ background: "var(--paper-light)" }}>
-            Exit to home
-          </button>
-        </div>
+        {!touch && actions}
       </section>
     </div>
   );
@@ -1095,6 +1113,8 @@ function Onboarding() {
   const mode = useSimulation((state) => state.mode);
   const storedOpen = useSyncExternalStore(noExternalStoreSubscribe, readOnboardingOpen, () => false);
   const [dismissed, setDismissed] = useState(false);
+  // a phone held sideways has ~360px of height: the card has to fit it without scrolling
+  const touch = useCoarsePointer();
   const open = storedOpen && !dismissed;
   if (!open) return null;
   const warden = mode.kind === "warden";
@@ -1109,18 +1129,26 @@ function Onboarding() {
   };
   return (
     <div className="pointer-events-auto absolute inset-0 z-50 grid place-items-center overflow-y-auto bg-night/70 p-4 backdrop-blur-sm">
-      <section role="dialog" aria-modal="true" aria-labelledby="onboarding-title" className="brutal-panel w-full max-w-xl p-5 text-ink sm:p-7">
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="onboarding-title"
+        className={`brutal-panel w-full text-ink ${touch ? "max-w-2xl p-4" : "max-w-xl p-5 sm:p-7"}`}
+      >
         <span className="brutal-tag bg-sun">How to play</span>
-        <h2 id="onboarding-title" className="mt-3 text-3xl font-black uppercase leading-[0.95] tracking-[-0.05em]">
+        <h2
+          id="onboarding-title"
+          className={`mt-3 font-black uppercase leading-[0.95] tracking-[-0.05em] ${touch ? "text-xl" : "text-3xl"}`}
+        >
           {warden ? "You see the danger. Talk them out." : "Six steps. Then get out."}
         </h2>
-        <p className="mt-2 text-sm leading-relaxed text-ink-soft">
+        <p className={`mt-2 text-sm leading-relaxed text-ink-soft ${touch ? "hidden" : ""}`}>
           {warden
             ? "You watch the evacuee's sector, check the evidence and send route messages. They cannot see the hazards you see."
             : "A short narrated briefing plays first. Your controls unlock when it ends. The steps stay on screen the whole time."}
         </p>
         {warden ? (
-          <ol className="mt-5 grid gap-2 text-sm">
+          <ol className={`grid gap-2 ${touch ? "mt-3 grid-cols-2 text-[12px]" : "mt-5 text-sm"}`}>
             {[
               ["Watch", "Follow the evacuee through your sector."],
               ["Observe", "Open Evidence and inspect what changed."],
@@ -1136,27 +1164,36 @@ function Onboarding() {
             ))}
           </ol>
         ) : (
-          <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <ol className="space-y-1.5 text-sm">
+          <div className={`grid grid-cols-2 ${touch ? "mt-3 gap-3" : "mt-5 gap-4"}`}>
+            <ol className={touch ? "space-y-1 text-[12px]" : "space-y-1.5 text-sm"}>
               {STEPS.map((id, index) => (
                 <li key={id} className="flex gap-2">
                   <span className="w-4 font-mono font-black text-coral">{index + 1}</span>
                   <span>
-                    <b>{scenarioObjectById(id).label}</b> <span className="text-ink-soft">· {placeName(id)}</span>
+                    <b>{scenarioObjectById(id).label}</b>
+                    {!touch && <span className="text-ink-soft"> · {placeName(id)}</span>}
                   </span>
                 </li>
               ))}
             </ol>
-            <div className="space-y-2 border-2 border-ink bg-paper p-3 text-[11px] font-bold uppercase tracking-wider">
-              {(
-                [
-                  ["WASD", "Move"],
-                  ["Shift", "Sprint"],
-                  ["Space", "Jump"],
-                  ["E", "Interact"],
-                  ["V", "Switch camera"],
-                  ["Esc", "Pause menu"],
-                ] as const
+            <div className={`border-2 border-ink bg-paper font-bold uppercase tracking-wider ${touch ? "space-y-1 p-2 text-[10px]" : "space-y-2 p-3 text-[11px]"}`}>
+              {(touch
+                ? ([
+                    ["Stick", "Move · push to the edge to run"],
+                    ["Drag", "Look around"],
+                    ["E", "Use"],
+                    ["Jump", "Jump"],
+                    ["Cam", "Switch camera"],
+                    ["❚❚", "Pause menu"],
+                  ] as const)
+                : ([
+                    ["WASD", "Move"],
+                    ["Shift", "Sprint"],
+                    ["Space", "Jump"],
+                    ["E", "Interact"],
+                    ["V", "Switch camera"],
+                    ["Esc", "Pause menu"],
+                  ] as const)
               ).map(([key, label]) => (
                 <div key={key} className="flex items-center gap-2">
                   <Key light small>
@@ -1168,7 +1205,7 @@ function Onboarding() {
             </div>
           </div>
         )}
-        <button onClick={finish} className="brutal-button mt-6 w-full px-4 py-3">
+        <button onClick={finish} className={`brutal-button w-full px-4 ${touch ? "mt-3 py-2.5" : "mt-6 py-3"}`}>
           {warden ? "Open warden station" : "Start the briefing"}
         </button>
       </section>
@@ -1186,6 +1223,7 @@ function Briefing() {
   const [lines, setLines] = useState(EVACUEE_BRIEFING);
   const [provider, setProvider] = useState<"bedrock" | "authored">("authored");
   const [voice, setVoice] = useState(true);
+  const touch = useCoarsePointer();
   const step = useRef(0);
   const run = useRef(0);
 
@@ -1194,6 +1232,8 @@ function Briefing() {
     let disposed = false;
     const start = () => {
       if (useSimulation.getState().briefingStatus === "playing") return;
+      // still inside the tap that started it, which fullscreen and the lock both require
+      void enterLandscape();
       const token = ++run.current;
       const live = () => !disposed && run.current === token;
       beginBriefing();
@@ -1277,11 +1317,16 @@ function Briefing() {
 
   return (
     <div className="pointer-events-auto absolute inset-0 z-50 grid place-items-center overflow-y-auto bg-night/85 p-4 backdrop-blur-md">
-      <section className="brutal-panel-dark w-full max-w-2xl p-4 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="briefing-title">
-        <div className="flex items-start justify-between gap-4 border-b border-paper/15 pb-4">
+      <section
+        className={`brutal-panel-dark w-full ${touch ? "max-w-3xl p-3" : "max-w-2xl p-4 sm:p-6"}`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="briefing-title"
+      >
+        <div className={`flex items-start justify-between gap-4 border-b border-paper/15 ${touch ? "pb-2" : "pb-4"}`}>
           <div>
             <span className="brutal-tag bg-sun text-ink">Briefing</span>
-            <h2 id="briefing-title" className="mt-2 text-2xl font-black uppercase tracking-[-0.04em] sm:text-3xl">
+            <h2 id="briefing-title" className={`mt-2 font-black uppercase tracking-[-0.04em] ${touch ? "text-lg" : "text-2xl sm:text-3xl"}`}>
               Listen first. Then move.
             </h2>
           </div>
@@ -1292,20 +1337,23 @@ function Briefing() {
             <div>controls locked</div>
           </div>
         </div>
-        <div className="mt-4">
+        {/* sideways on a phone the artwork sits beside the words, or the card outgrows the screen */}
+        <div className={touch ? "mt-3 grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] items-start gap-3" : ""}>
+        <div className={touch ? "" : "mt-4"}>
           <BriefingArtwork slide={slide} />
         </div>
-        <div className="mt-4 border-l-4 border-sun bg-paper/5 px-4 py-3" aria-live="polite">
+        <div>
+        <div className={`border-l-4 border-sun bg-paper/5 ${touch ? "px-3 py-2" : "mt-4 px-4 py-3"}`} aria-live="polite">
           <div className="flex items-center justify-between gap-3 text-[10px] font-black uppercase tracking-[0.18em] text-sun">
             <span>Narrator</span>
             {provider === "bedrock" && <span className="text-paper/50">Amazon Bedrock</span>}
           </div>
-          <div className="mt-1 text-base leading-relaxed text-paper sm:text-lg">{line}</div>
+          <div className={`mt-1 leading-relaxed text-paper ${touch ? "text-[13px] leading-snug" : "text-base sm:text-lg"}`}>{line}</div>
         </div>
-        <div className="mt-4 h-2 border border-paper/20 bg-black/40">
+        <div className={`h-2 border border-paper/20 bg-black/40 ${touch ? "mt-2" : "mt-4"}`}>
           <div className="h-full bg-sun transition-[width] duration-500" style={{ width: `${Math.min(100, ((slide + 1) / Math.max(1, lines.length)) * 100)}%` }} />
         </div>
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <div className={`flex flex-wrap items-center justify-between gap-3 ${touch ? "mt-2" : "mt-4"}`}>
           <button
             onClick={() => {
               writeVoiceEnabled(!voice);
@@ -1319,6 +1367,8 @@ function Briefing() {
           <button onClick={skip} className="brutal-button-dark px-4 py-2.5">
             Skip briefing
           </button>
+        </div>
+        </div>
         </div>
       </section>
     </div>
@@ -1345,44 +1395,49 @@ function requestCanvasLock() {
  * avoids putting a deadline into the room snapshot for clients to disagree about.
  */
 /**
- * Nudge to turn the phone. Advisory only: play is never blocked or the orientation locked,
- * because a player who wants to stay in portrait — or has rotation locked at the OS level —
- * still has every control reachable, just with less of the building in view.
+ * The drill is landscape-only on a phone. In portrait the whole screen is covered by a
+ * prompt to turn the phone, and a running drill is paused so no air is lost while the
+ * player does it. Where the browser allows, the button also locks landscape for them.
  */
-function RotateHint() {
+function PortraitBlock() {
   const touch = useCoarsePointer();
-  const briefingStatus = useSimulation((state) => state.briefingStatus);
-  const failed = useSimulation((state) => state.failed);
-  const complete = useSimulation((state) => state.assemblyConfirmed);
-  const [portrait, setPortrait] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+  const portrait = useSyncExternalStore(subscribePortrait, readPortrait, () => false);
+  const blocked = touch && portrait;
 
   useEffect(() => {
-    if (!touch) return;
-    const query = window.matchMedia("(orientation: portrait)");
-    const apply = () => setPortrait(query.matches);
-    apply();
-    query.addEventListener("change", apply);
-    return () => query.removeEventListener("change", apply);
-  }, [touch]);
+    if (!blocked) return;
+    const state = useSimulation.getState();
+    if (state.briefingStatus === "complete" && !state.failed && !state.assemblyConfirmed) state.setPaused(true);
+  }, [blocked]);
 
-  if (!touch || !portrait || dismissed || briefingStatus !== "complete" || failed || complete) return null;
-
+  if (!blocked) return null;
   return (
-    <div className="safe-top pointer-events-none absolute inset-x-0 top-0 z-40 flex justify-center px-3">
-      <div className="pointer-events-auto flex items-center gap-3 border-2 border-ink bg-sun px-3 py-2 shadow-[4px_4px_0_var(--ink)]">
-        <span className="text-[11px] font-black uppercase tracking-[0.12em] text-ink">
-          Turn your phone sideways for more of the floor
-        </span>
-        <button
-          onClick={() => setDismissed(true)}
-          className="border-2 border-ink px-2 py-1 text-[10px] font-black uppercase tracking-widest text-ink"
-        >
-          Dismiss
+    <div className="pointer-events-auto absolute inset-0 z-[70] grid place-items-center bg-night p-6 text-center" role="alertdialog" aria-labelledby="rotate-title">
+      <div className="flex max-w-xs flex-col items-center">
+        <svg viewBox="0 0 64 64" className="rotate-phone h-20 w-20 text-sun" aria-hidden>
+          <rect x="20" y="8" width="24" height="44" rx="4" fill="none" stroke="currentColor" strokeWidth="3" />
+          <circle cx="32" cy="46" r="2" fill="currentColor" />
+        </svg>
+        <h2 id="rotate-title" className="mt-6 text-2xl font-black uppercase tracking-[-0.03em] text-paper">
+          Turn your phone
+        </h2>
+        <p className="mt-2 text-sm leading-relaxed text-paper/70">
+          CampusEvac is played sideways. Rotate to landscape to continue - if nothing happens, switch off rotation lock.
+        </p>
+        <button onClick={() => void enterLandscape()} className="brutal-button mt-6 px-5 py-3">
+          Go full screen
         </button>
       </div>
     </div>
   );
+}
+
+const portraitQuery = () => window.matchMedia("(orientation: portrait)");
+const readPortrait = () => portraitQuery().matches;
+function subscribePortrait(onChange: () => void) {
+  const query = portraitQuery();
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
 }
 
 function WaitingForPlayer() {
@@ -1484,24 +1539,31 @@ function PauseMenu({ onRestart, onLeave, onHome }: { onRestart: () => void; onLe
   const warden = mode.kind === "warden";
   const resume = () => {
     setPaused(false);
+    if (touch) void enterLandscape();
     if (view === "evacuee" && !touch) requestCanvasLock();
   };
-  const row = "flex w-full items-center justify-between border-2 border-paper/20 px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.14em] text-paper hover:border-paper/60";
+  // Sideways on a phone the menu has ~360px of height, so it goes two columns and tighter.
+  const row = `flex w-full items-center justify-between gap-2 border-2 border-paper/20 text-left text-[11px] font-black uppercase tracking-[0.14em] text-paper hover:border-paper/60 ${touch ? "px-3 py-2" : "px-4 py-3"}`;
 
   return (
-    <div className="pointer-events-auto absolute inset-0 z-50 grid place-items-center overflow-y-auto bg-night/75 p-4 backdrop-blur-sm">
-      <section role="dialog" aria-modal="true" aria-labelledby="pause-title" className="brutal-panel-dark w-full max-w-md p-5 sm:p-6">
+    <div className={`pointer-events-auto absolute inset-0 z-50 grid place-items-center overflow-y-auto bg-night/75 backdrop-blur-sm ${touch ? "p-2" : "p-4"}`}>
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pause-title"
+        className={`brutal-panel-dark w-full ${touch ? "max-w-2xl p-4" : "max-w-md p-5 sm:p-6"}`}
+      >
         <div className="flex items-center justify-between">
           <span className="brutal-tag bg-sun text-ink">Paused</span>
           <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-paper/55">
             {touch ? "Tap resume to continue" : <><Key small>Esc</Key> to resume</>}
           </span>
         </div>
-        <h2 id="pause-title" className="mt-3 text-3xl font-black uppercase tracking-[-0.05em]">
+        <h2 id="pause-title" className={`font-black uppercase tracking-[-0.05em] ${touch ? "sr-only" : "mt-3 text-3xl"}`}>
           Take a breath.
         </h2>
-        <div className="mt-5 space-y-2.5">
-          <button onClick={resume} className="brutal-button w-full px-4 py-3">
+        <div className={touch ? "mt-3 grid grid-cols-2 gap-2" : "mt-5 space-y-2.5"}>
+          <button onClick={resume} className={`brutal-button w-full px-4 ${touch ? "col-span-2 py-2.5" : "py-3"}`}>
             Resume
           </button>
           {solo && (
@@ -1512,12 +1574,15 @@ function PauseMenu({ onRestart, onLeave, onHome }: { onRestart: () => void; onLe
               }}
               className={row}
             >
-              Restart drill <span className="text-paper/50">from the entrance</span>
+              Restart drill {!touch && <span className="text-paper/50">from the entrance</span>}
             </button>
           )}
           {!warden && (
             <button onClick={toggleCameraMode} className={row}>
-              Camera <span className="text-sun">{cameraMode === "third" ? "Over the shoulder" : "First person"}</span>
+              Camera{" "}
+              <span className="text-sun">
+                {cameraMode === "third" ? (touch ? "Shoulder" : "Over the shoulder") : "First person"}
+              </span>
             </button>
           )}
           <button
@@ -1538,12 +1603,12 @@ function PauseMenu({ onRestart, onLeave, onHome }: { onRestart: () => void; onLe
             Graphics <span className="text-sun">{quality === "high" ? "Cinematic" : "Fast"}</span>
           </button>
           {solo && (
-            <div className="grid grid-cols-3 gap-2">
+            <div className={`grid grid-cols-3 gap-2 ${touch ? "col-span-2" : ""}`}>
               {VIEWS.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => setView(item.id)}
-                  className={`border-2 px-2 py-2 text-[9px] font-black uppercase tracking-wider ${view === item.id ? "border-sun bg-sun text-ink" : "border-paper/20 text-paper/75 hover:border-paper/60"}`}
+                  className={`border-2 px-2 ${touch ? "py-1.5" : "py-2"} text-[9px] font-black uppercase tracking-wider ${view === item.id ? "border-sun bg-sun text-ink" : "border-paper/20 text-paper/75 hover:border-paper/60"}`}
                 >
                   {item.title}
                 </button>
@@ -1551,7 +1616,7 @@ function PauseMenu({ onRestart, onLeave, onHome }: { onRestart: () => void; onLe
             </div>
           )}
         </div>
-        {!warden && (
+        {!warden && !touch && (
           <details className="mt-4 border-2 border-paper/15 px-4 py-3 text-sm text-paper/80">
             <summary className="cursor-pointer text-[11px] font-black uppercase tracking-[0.14em] text-paper">How to play</summary>
             <ol className="mt-3 space-y-1">
@@ -1565,13 +1630,13 @@ function PauseMenu({ onRestart, onLeave, onHome }: { onRestart: () => void; onLe
             <p className="mt-3 text-[11px] text-paper/55">WASD move · Shift sprint · Space jump · E interact · V camera · Tab steps · Esc menu</p>
           </details>
         )}
-        <div className="mt-5 grid gap-2.5 border-t border-paper/15 pt-5 sm:grid-cols-2">
+        <div className={`grid gap-2.5 border-t border-paper/15 sm:grid-cols-2 ${touch ? "mt-3 pt-3" : "mt-5 pt-5"}`}>
           {!solo && (
-            <button onClick={onLeave} className="border-2 border-coral px-4 py-3 text-[11px] font-black uppercase tracking-[0.14em] text-coral hover:bg-coral hover:text-ink">
+            <button onClick={onLeave} className="border-2 border-coral px-4 py-2 sm:py-3 text-[11px] font-black uppercase tracking-[0.14em] text-coral hover:bg-coral hover:text-ink">
               Leave drill
             </button>
           )}
-          <button onClick={onHome} className={`border-2 border-coral px-4 py-3 text-[11px] font-black uppercase tracking-[0.14em] text-coral hover:bg-coral hover:text-ink ${solo ? "sm:col-span-2" : ""}`}>
+          <button onClick={onHome} className={`border-2 border-coral px-4 ${touch ? "py-2" : "py-3"} text-[11px] font-black uppercase tracking-[0.14em] text-coral hover:bg-coral hover:text-ink ${solo ? "sm:col-span-2" : ""}`}>
             Exit to home
           </button>
         </div>
@@ -1714,7 +1779,7 @@ export default function DrillShell({ title }: { title?: string }) {
       <Briefing />
 
       {/* top left: where, what next, and how the evacuee is doing */}
-      <div className="safe-top pointer-events-none absolute left-3 top-0 z-10 flex max-w-[58vw] flex-col items-start gap-2 sm:left-4 sm:max-w-none sm:gap-3">
+      <div className="safe-top hud-left pointer-events-none absolute top-0 z-10 flex max-w-[58vw] flex-col items-start gap-2 sm:max-w-none sm:gap-3">
         <LocationHeader tag={tag} compact={touch} />
         {evacueeHud ? (
           <>
@@ -1727,7 +1792,7 @@ export default function DrillShell({ title }: { title?: string }) {
       </div>
 
       {/* top right: status, menu, map, and the evidence feed when asked for */}
-      <div className="safe-top pointer-events-none absolute right-3 top-0 z-10 flex max-h-[calc(100%-1.5rem)] max-w-[52vw] flex-col items-end gap-2 overflow-y-auto sm:right-4 sm:max-w-none">
+      <div className="safe-top hud-right pointer-events-none absolute top-0 z-10 flex max-h-[calc(100%-1.5rem)] max-w-[52vw] flex-col items-end gap-2 overflow-y-auto sm:max-w-none">
         <div className="pointer-events-auto flex flex-wrap items-center justify-end gap-2">
           <ConnectionBadge compact={touch} />
           {warden && (
@@ -1784,7 +1849,7 @@ export default function DrillShell({ title }: { title?: string }) {
 
       {/* bottom left: the evacuee's own vitals on a desktop (a phone keeps them top left) */}
       {evacueeHud && !touch && (
-        <div className="pointer-events-none absolute bottom-3 left-3 z-10 sm:bottom-4 sm:left-4">
+        <div className="hud-left pointer-events-none absolute bottom-3 z-10 sm:bottom-4">
           <Vitals />
         </div>
       )}
@@ -1808,7 +1873,7 @@ export default function DrillShell({ title }: { title?: string }) {
       {showStick && <TouchControls />}
       <Onboarding />
       <TapToBegin />
-      <RotateHint />
+      <PortraitBlock />
       <WaitingForPlayer />
       <PauseMenu onRestart={restart} onLeave={leaveDrill} onHome={goHome} />
       <EndCard onReset={restart} onLeave={leaveDrill} onHome={goHome} />

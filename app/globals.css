@@ -501,6 +501,34 @@ body {
   padding-top: max(0.75rem, env(safe-area-inset-top));
 }
 
+/* HUD edges clear the notch and the rounded corners when a phone is held sideways. */
+.hud-left {
+  left: max(0.75rem, env(safe-area-inset-left));
+}
+
+.hud-right {
+  right: max(0.75rem, env(safe-area-inset-right));
+}
+
+/* The phone in the "turn your phone" prompt tips over and back. */
+.rotate-phone {
+  animation: rotate-phone 2.4s ease-in-out infinite;
+}
+
+@keyframes rotate-phone {
+  0%,
+  20% {
+    transform: rotate(0deg);
+  }
+  50%,
+  80% {
+    transform: rotate(-90deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
 /** Sits clear of the thumbs whatever the control cluster actually measures. */
 .above-dock {
   bottom: calc(var(--touch-dock-h, 190px) + 0.75rem);
