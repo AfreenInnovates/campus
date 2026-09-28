@@ -14,7 +14,7 @@ import { useSimulation } from "../store";
  * look pad do not steal each other's moves.
  */
 
-const STICK_RADIUS = 56;
+const STICK_RADIUS = 46;
 /** Fraction of the stick radius that counts as "sprint". */
 const SPRINT_THRESHOLD = 0.85;
 
@@ -94,7 +94,7 @@ function Stick() {
     <div
       ref={base}
       aria-label="Move"
-      className="pointer-events-auto relative grid h-[132px] w-[132px] touch-none place-items-center rounded-full border-2 border-white/25 bg-black/35 backdrop-blur-sm"
+      className="pointer-events-auto relative grid h-[112px] w-[112px] touch-none place-items-center rounded-full border-2 border-white/25 bg-black/35"
     >
       <div className="absolute inset-3 rounded-full border border-white/10" />
       <div
@@ -104,12 +104,9 @@ function Stick() {
       />
       <div
         ref={knob}
-        className="h-14 w-14 rounded-full border-2 border-sun bg-sun/25"
+        className="h-12 w-12 rounded-full border-2 border-sun bg-sun/25"
       />
-      <span className="pointer-events-none absolute -top-5 text-[9px] font-black uppercase tracking-[0.18em] text-white/45">
-        move
-      </span>
-      <span className="pointer-events-none absolute -bottom-5 text-[9px] font-black uppercase tracking-[0.18em] text-white/40">
+      <span className="pointer-events-none absolute -top-4 text-[8px] font-black uppercase tracking-[0.18em] text-white/40">
         push to run
       </span>
     </div>
@@ -169,11 +166,15 @@ function ActionButton({
   hint,
   color,
   onPress,
+  size,
+  className = "",
 }: {
   label: string;
   hint?: string;
   color: string;
   onPress: () => void;
+  size: number;
+  className?: string;
 }) {
   return (
     <button
@@ -181,8 +182,8 @@ function ActionButton({
         e.preventDefault();
         onPress();
       }}
-      className="pointer-events-auto grid h-[74px] w-[74px] touch-none place-items-center rounded-full border-2 bg-black/45 backdrop-blur-sm active:scale-95"
-      style={{ borderColor: color }}
+      className={`pointer-events-auto absolute grid touch-none place-content-center rounded-full border-2 bg-black/45 active:scale-95 ${className}`}
+      style={{ borderColor: color, width: size, height: size }}
     >
       <span
         className="text-[11px] font-black uppercase tracking-[0.08em]"
@@ -201,13 +202,12 @@ function ActionButton({
 
 export default function TouchControls() {
   const prompt = useSimulation((s) => s.prompt);
-  const air = useSimulation((s) => s.air);
-  const health = useSimulation((s) => s.health);
+  // yes/no rather than the values: air and health change every hazard tick
+  const down = useSimulation((s) => s.air <= 0 || s.health <= 0);
   const failed = useSimulation((s) => s.failed);
   const assemblyConfirmed = useSimulation((s) => s.assemblyConfirmed);
   const briefingStatus = useSimulation((s) => s.briefingStatus);
   const paused = useSimulation((s) => s.paused);
-  const cameraMode = useSimulation((s) => s.cameraMode);
   const toggleCameraMode = useSimulation((s) => s.toggleCameraMode);
   // only label the interact button with what it would actually do
   const [action, setAction] = useState<string | null>(null);
@@ -246,11 +246,13 @@ export default function TouchControls() {
 
   useEffect(() => () => observer.current?.disconnect(), []);
 
-  if (briefingStatus !== "complete" || paused || air <= 0 || health <= 0 || failed || assemblyConfirmed) return null;
+  if (briefingStatus !== "complete" || paused || down || failed || assemblyConfirmed) return null;
   const assemblyHere = action === "assembly";
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-20 select-none">
+    // Under the HUD (z-10), not over it: the look pad fills the screen, and on top it swallowed
+    // every tap meant for the menu button and the objectives card.
+    <div className="pointer-events-none absolute inset-0 z-[6] select-none">
       <LookPad />
 
       {/* the prompt sits above the thumbs where it can be read mid-move */}
@@ -266,24 +268,30 @@ export default function TouchControls() {
       <div ref={dock} className="safe-bottom safe-x absolute inset-x-0 bottom-0 flex items-end justify-between">
         <Stick />
 
-        <div className="flex flex-col items-end gap-3">
+        {/* a thumb cluster, not a column: jump under the thumb, use beside it, camera above */}
+        <div className="relative h-[124px] w-[132px]">
           <ActionButton
-            label="CAM"
-            hint={cameraMode === "third" ? "first" : "third"}
-            color="#c9b8ff"
-            onPress={toggleCameraMode}
+            label={assemblyHere ? "READY" : "JUMP"}
+            hint={assemblyHere ? "assembly" : undefined}
+            color={assemblyHere ? "#2fd18f" : "#ffc44d"}
+            onPress={pressJump}
+            size={64}
+            className="bottom-0 right-0"
           />
           <ActionButton
             label="E"
             hint="use"
             color={action === "intervention" ? "#7b5cff" : action === "scenario" ? "#ffc44d" : "#9a8fa3"}
             onPress={pressUse}
+            size={58}
+            className="bottom-3 right-[70px]"
           />
           <ActionButton
-            label={assemblyHere ? "READY" : "JUMP"}
-            hint={assemblyHere ? "assembly" : undefined}
-            color={assemblyHere ? "#2fd18f" : "#ffc44d"}
-            onPress={pressJump}
+            label="CAM"
+            color="#c9b8ff"
+            onPress={toggleCameraMode}
+            size={42}
+            className="bottom-[72px] right-2"
           />
         </div>
       </div>

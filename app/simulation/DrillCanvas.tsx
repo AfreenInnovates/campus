@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, Suspense, useEffect, useState } from "react";
+import { lazy, memo, Suspense, useEffect, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { KeyboardControls, PerformanceMonitor } from "@react-three/drei";
 import { Physics } from "@react-three/rapier";
@@ -12,11 +12,13 @@ import Evacuee from "./components/Evacuee";
 import Systems from "./components/Systems";
 import NetSync from "./components/NetSync";
 import ViewRig from "./components/ViewRig";
-import Effects from "./components/Effects";
 import SmokeLayer from "./components/SmokeLayer";
 import { reportStruggling, useGraphicsQuality } from "./graphics";
 import { useIsSimulationOwner } from "./store";
 import { useCoarsePointer } from "./useCoarsePointer";
+
+/** Fetched only when the cinematic pass is on, so phones and the fast setting never download it. */
+const Effects = lazy(() => import("./components/Effects"));
 
 const MAP = [
   { name: "forward", keys: ["ArrowUp", "KeyW"] },

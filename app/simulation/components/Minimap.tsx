@@ -27,8 +27,11 @@ const SHORT: Partial<Record<RoomId, string>> = {
 };
 const EXIT = scenarioObjectById("main-exit").position;
 
-/** Lightweight floorplan layer; the 3D scene remains the only world view. */
-export default function Minimap() {
+/**
+ * Lightweight floorplan layer; the 3D scene remains the only world view. `compact` is the
+ * phone version: the plan alone, smaller, with no title or key.
+ */
+export default function Minimap({ compact = false }: { compact?: boolean }) {
   const mode = useSimulation((state) => state.mode);
   const sector = useSimulation((state) => state.sector);
   const progress = useSimulation((state) => state.scenarioProgress);
@@ -56,14 +59,14 @@ export default function Minimap() {
   }, []);
 
   return (
-    <div className="hud-panel hud-panel-blue p-2.5">
-      <div className="mb-1.5 flex items-center justify-between gap-3 text-[9px] font-black uppercase tracking-[0.18em]">
+    <div className={`hud-panel hud-panel-blue ${compact ? "p-1.5" : "p-2.5"}`}>
+      <div className={`mb-1.5 ${compact ? "hidden" : "flex"} items-center justify-between gap-3 text-[9px] font-black uppercase tracking-[0.18em]`}>
         <span className="text-paper">Science Block · L1</span>
         <span className="truncate text-paper/50">{roomById(sector).name.split(" / ").pop()}</span>
       </div>
       <svg
         viewBox={`0 0 ${W} ${H}`}
-        className="block h-[92px] w-[94px] overflow-visible sm:h-[150px] sm:w-[154px]"
+        className={compact ? "block h-[78px] w-[80px] overflow-visible" : "block h-[92px] w-[94px] overflow-visible sm:h-[150px] sm:w-[154px]"}
         role="img"
         aria-label="Floorplan with your position, the next objective and the exit"
       >
@@ -112,7 +115,7 @@ export default function Minimap() {
           <path d="M0 1.9 L1.25 -1.1 L0 -0.45 L-1.25 -1.1 Z" fill="#ffc44d" stroke="#16111e" strokeWidth={0.3} />
         </g>
       </svg>
-      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[9px] font-bold uppercase tracking-wider text-paper/65">
+      <div className={`mt-1.5 flex-wrap ${compact ? "hidden" : "flex"} gap-x-3 gap-y-1 text-[9px] font-bold uppercase tracking-wider text-paper/65`}>
         <span className="flex items-center gap-1">
           <i className="inline-block h-0 w-0 border-x-[4px] border-t-[7px] border-x-transparent border-t-sun" />
           {mode.kind === "warden" ? "Evacuee" : "You"}

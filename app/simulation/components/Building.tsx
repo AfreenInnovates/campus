@@ -249,8 +249,7 @@ function RouteBlock() {
           <Label
             position={[0, 1.55, 0]}
             color="#ef4444"
-             text="EAST PASSAGE UNSAFE"
-             sub="heavy smoke / verify, then send the west route"
+            text="East passage unsafe"
           />
         )}
       </group>
@@ -308,8 +307,8 @@ function RoomFog({ room }: { room: RoomDef }) {
       <Label
         position={[cx, 2.1, cz]}
         color="#6b7787"
-        text={room.name.toUpperCase()}
-         sub="unexplored - follow the evacuee in"
+        text={room.name.split(" / ").pop() ?? room.name}
+        faint
       />
     </group>
   );
