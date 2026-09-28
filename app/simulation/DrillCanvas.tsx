@@ -1,8 +1,8 @@
 "use client";
 
-import { Suspense, useEffect } from "react";
+import { memo, Suspense, useEffect, useState } from "react";
 import { Canvas } from "@react-three/fiber";
-import { KeyboardControls } from "@react-three/drei";
+import { KeyboardControls, PerformanceMonitor } from "@react-three/drei";
 import { Physics } from "@react-three/rapier";
 import Building from "./components/Building";
 import Exterior from "./components/Exterior";
@@ -12,6 +12,9 @@ import Evacuee from "./components/Evacuee";
 import Systems from "./components/Systems";
 import NetSync from "./components/NetSync";
 import ViewRig from "./components/ViewRig";
+import Effects from "./components/Effects";
+import SmokeLayer from "./components/SmokeLayer";
+import { reportStruggling, useGraphicsQuality } from "./graphics";
 import { useIsSimulationOwner } from "./store";
 import { useCoarsePointer } from "./useCoarsePointer";
 
@@ -51,9 +54,13 @@ function useSpaceForJumpOnly() {
   }, []);
 }
 
-export default function DrillCanvas() {
+/** Memoised: the scene takes no props, so nothing the HUD re-renders should reach it. */
+export default memo(function DrillCanvas() {
   const ownsSimulation = useIsSimulationOwner();
   const touch = useCoarsePointer();
+  const quality = useGraphicsQuality(touch);
+  // resolution steps down once if the frame rate cannot keep up, instead of stuttering on
+  const [lean, setLean] = useState(false);
   useSpaceForJumpOnly();
 
   // A phone renders the same scene into a much denser display with a fraction of the GPU.
@@ -62,11 +69,20 @@ export default function DrillCanvas() {
   return (
     <KeyboardControls map={MAP}>
       <Canvas
-        shadows={touch ? false : "soft"}
-        dpr={touch ? 1 : [1, 1.5]}
+        // three dropped PCFSoft (it falls back to PCF and warns every frame), so ask for PCF directly
+        shadows={touch ? false : "percentage"}
+        dpr={touch ? (lean ? 0.8 : 1) : lean ? 1 : [1, 1.5]}
         gl={{ antialias: !touch, powerPreference: "high-performance" }}
+        // with the effect pass on, it tone maps as its last step instead of the renderer
+        flat={quality === "high"}
         style={{ position: "absolute", inset: 0 }}
       >
+        <PerformanceMonitor
+          onDecline={() => {
+            setLean(true);
+            reportStruggling();
+          }}
+        />
         <Suspense fallback={null}>
           <ViewRig />
           {/* Only the evacuee/solo client steps physics; the warden receives a marker. */}
@@ -78,9 +94,11 @@ export default function DrillCanvas() {
             <Evacuee />
             {ownsSimulation && <Systems />}
           </Physics>
+          <SmokeLayer touch={touch} />
           <NetSync />
+          {quality === "high" && <Effects />}
         </Suspense>
       </Canvas>
     </KeyboardControls>
   );
-}
+});

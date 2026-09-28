@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, 
 import Minimap from "./components/Minimap";
 import TouchControls from "./components/TouchControls";
 import { useCoarsePointer } from "./useCoarsePointer";
+import { setGraphicsQuality, useGraphicsQuality } from "./graphics";
 import {
   CRITICAL_SCENARIO_OBJECTS,
   nextScenarioGuidance,
@@ -63,14 +64,14 @@ function Key({ children, light = false, small = false }: { children: ReactNode; 
 function Bar({ label, value, color, danger }: { label: string; value: number; color: string; danger?: boolean }) {
   const fill = danger ? "var(--danger)" : color;
   return (
-    <div className="w-40">
+    <div className="w-36">
       <div className="mb-1 flex items-center justify-between text-[10px] font-black uppercase tracking-[0.16em] text-paper/75">
         <span>{label}</span>
         <span className="font-mono" style={{ color: fill }}>
           {Math.round(value)}
         </span>
       </div>
-      <div className="h-2.5 w-full border border-paper/25 bg-black/40">
+      <div className="h-1.5 w-full bg-black/45">
         <div className="h-full transition-[width] duration-150" style={{ width: `${Math.max(0, Math.min(100, value))}%`, background: fill }} />
       </div>
     </div>
@@ -108,24 +109,65 @@ function LocationHeader({ tag }: { tag: string }) {
   );
 }
 
+/**
+ * One objective at a time. The whole checklist is a Tab away on a keyboard, and always open
+ * on a phone (where it already folds behind its own toggle), but the default is a single
+ * card: what to do next and where.
+ */
 function ObjectivesPanel() {
   const progress = useSimulation((state) => state.scenarioProgress);
+  const touch = useCoarsePointer();
+  const [expanded, setExpanded] = useState(false);
   const guidance = nextScenarioGuidance(progress);
   const done = CRITICAL_SCENARIO_OBJECTS.filter((id) => progress[id]).length;
+  const showAll = expanded || touch;
+
+  useEffect(() => {
+    if (touch) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.code !== "Tab" || event.altKey || event.ctrlKey || event.metaKey) return;
+      const tag = (event.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      event.preventDefault();
+      setExpanded((value) => !value);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [touch]);
+
+  const current = guidance.id === "complete" ? null : guidance;
   return (
     <section className="hud-panel pointer-events-auto w-[min(19.5rem,calc(100vw-1.5rem))] p-3" aria-label="Objectives">
-      <div className="flex items-center justify-between border-b border-paper/15 pb-2">
-        <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-sun">Objectives</h2>
-        <span className="font-mono text-[10px] text-paper/60">
-          {done}/{CRITICAL_SCENARIO_OBJECTS.length} done
-        </span>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-sun">{showAll ? "Objectives" : "Next step"}</h2>
+        <div className="flex items-center gap-1" role="img" aria-label={`${done} of ${CRITICAL_SCENARIO_OBJECTS.length} done`}>
+          {STEPS.map((id) => (
+            <span key={id} className={`h-1.5 w-3 ${progress[id] ? "bg-mint" : guidance.id === id ? "bg-sun" : "bg-paper/20"}`} />
+          ))}
+        </div>
       </div>
-      <ol className="mt-2 space-y-1.5">
+      {!showAll && current && (
+        <div key={current.id} className="hud-rise mt-2">
+          <div className="text-[14px] font-black leading-tight text-paper">
+            {current.label}
+            <span className="ml-2 text-[9px] font-bold uppercase tracking-wider text-paper/45">
+              {roomById(current.room).name.split(" / ").pop()}
+            </span>
+          </div>
+          <p className="mt-1 text-[11px] leading-snug text-paper/75">{current.instruction}</p>
+        </div>
+      )}
+      {!touch && (
+        <div className="mt-2 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.16em] text-paper/40">
+          <Key small>Tab</Key> {showAll ? "hide the list" : "all steps"}
+        </div>
+      )}
+      <ol className={`mt-2 space-y-1.5 border-t border-paper/15 pt-2 ${showAll ? "" : "hidden"}`}>
         {STEPS.map((id) => {
           const complete = progress[id];
           const current = guidance.id === id;
           return (
-            <li key={id} className={`${current ? "flex" : "hidden sm:flex"} items-start gap-2 text-[12px] leading-snug`}>
+            <li key={id} className="flex items-start gap-2 text-[12px] leading-snug">
               <span
                 className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center border-2 text-[9px] font-black ${
                   complete ? "border-mint bg-mint text-ink" : current ? "border-sun text-sun" : "border-paper/30 text-transparent"
@@ -152,13 +194,27 @@ function ObjectivesPanel() {
 function Vitals() {
   const health = useSimulation((state) => state.health);
   const air = useSimulation((state) => state.air);
-  const cameraMode = useSimulation((state) => state.cameraMode);
   return (
-    <div className="hud-panel flex flex-col gap-2 p-3" style={{ borderLeftColor: "var(--mint)" }}>
+    <div className="hud-panel flex flex-col gap-2 px-3 py-2.5" style={{ borderLeftColor: "var(--mint)" }}>
       <Bar label="Health" value={health} color="var(--mint)" danger={health < 35} />
       <Bar label="Air" value={air} color="#6fb8ff" danger={air < 35} />
-      <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-paper/45">
-        Camera: {cameraMode === "third" ? "over the shoulder" : "first person"}
+    </div>
+  );
+}
+
+/** The evacuee's condition as the warden sees it. */
+function WardenVitals() {
+  const health = useSimulation((state) => state.health);
+  const air = useSimulation((state) => state.air);
+  const smoke = useSimulation((state) => state.smokeIntensity);
+  const routeStatus = useSimulation((state) => state.routeStatus);
+  return (
+    <div className="hud-panel hidden flex-col gap-2 p-3 sm:flex">
+      <Bar label="Evacuee health" value={health} color="var(--mint)" danger={health < 35} />
+      <Bar label="Evacuee air" value={air} color="#6fb8ff" danger={air < 35} />
+      <div className="flex flex-wrap gap-3 font-mono text-[10px] uppercase tracking-wider text-paper/60">
+        <span style={{ color: routeStatus === "unsafe" ? "var(--danger)" : routeStatus === "intervened" ? "var(--mint)" : "var(--sun)" }}>route / {routeStatus}</span>
+        <span>smoke / {Math.round(smoke * 100)}%</span>
       </div>
     </div>
   );
@@ -184,17 +240,34 @@ function PromptBar() {
   );
 }
 
+/** The key strip: there while the player is learning the controls, then out of the way. */
+const CONTROLS_VISIBLE_MS = 25_000;
+
 function ControlsHint() {
+  const briefing = useSimulation((state) => state.briefingStatus);
+  const resetSeq = useSimulation((state) => state.resetSeq);
+  const [hiddenFor, setHiddenFor] = useState<number | null>(null);
+  useEffect(() => {
+    if (briefing !== "complete") return;
+    const timer = window.setTimeout(() => setHiddenFor(resetSeq), CONTROLS_VISIBLE_MS);
+    return () => window.clearTimeout(timer);
+  }, [briefing, resetSeq]);
+  const visible = briefing !== "complete" || hiddenFor !== resetSeq;
   const items: [string, string][] = [
     ["WASD", "move"],
     ["Shift", "sprint"],
     ["Space", "jump"],
     ["E", "interact"],
     ["V", "camera"],
+    ["Tab", "steps"],
     ["Esc", "menu"],
   ];
   return (
-    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-night/60 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-paper/70">
+    <div
+      className="hud-fade flex flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-night/60 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-paper/70"
+      style={{ opacity: visible ? 1 : 0 }}
+      aria-hidden={!visible}
+    >
       {items.map(([key, label]) => (
         <span key={key} className="flex items-center gap-1.5">
           <Key small>{key}</Key>
@@ -202,6 +275,51 @@ function ControlsHint() {
         </span>
       ))}
     </div>
+  );
+}
+
+/** A large, brief place name the first time the evacuee walks into somewhere new. */
+function RoomTitle() {
+  const [title, setTitle] = useState<{ id: number; place: string; block: string } | null>(null);
+  useEffect(() => {
+    let seq = 0;
+    let timer: number | undefined;
+    const unsubscribe = useSimulation.subscribe((state, previous) => {
+      if (state.briefingStatus !== "complete" || state.sector === previous.sector) return;
+      if (previous.explored[state.sector] || state.sector === "outside") return;
+      const parts = roomById(state.sector).name.split(" / ");
+      const id = ++seq;
+      setTitle({ id, place: parts[parts.length - 1], block: parts.length > 1 ? parts[0] : "Campus" });
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setTitle((current) => (current?.id === id ? null : current)), 2900);
+    });
+    return () => {
+      unsubscribe();
+      window.clearTimeout(timer);
+    };
+  }, []);
+  if (!title) return null;
+  return (
+    <div key={title.id} className="room-title pointer-events-none absolute inset-x-0 top-[17%] z-10 flex flex-col items-center text-center" aria-hidden>
+      <span className="text-[10px] font-black uppercase tracking-[0.4em] text-sun/90">{title.block}</span>
+      <span className="mt-1 h-px w-40 bg-paper/40" />
+      <span className="mt-2 text-2xl font-black uppercase text-paper [text-shadow:0_2px_18px_rgba(0,0,0,0.7)] sm:text-4xl">{title.place}</span>
+      <span className="mt-2 h-px w-40 bg-paper/40" />
+    </div>
+  );
+}
+
+/** Air running out shows at the edges of the screen, not only in a number. */
+function AirVignette() {
+  const air = useSimulation((state) => state.air);
+  const failed = useSimulation((state) => state.failed);
+  const opacity = failed ? 0 : Math.max(0, Math.min(1, (60 - air) / 45));
+  return (
+    <div
+      className={`air-vignette pointer-events-none absolute inset-0 z-[5] ${air < 25 && !failed ? "gasping" : ""}`}
+      style={{ opacity }}
+      aria-hidden
+    />
   );
 }
 
@@ -1273,6 +1391,7 @@ function PauseMenu({ onRestart, onLeave, onHome }: { onRestart: () => void; onLe
   const cameraMode = useSimulation((state) => state.cameraMode);
   const toggleCameraMode = useSimulation((state) => state.toggleCameraMode);
   const touch = useCoarsePointer();
+  const quality = useGraphicsQuality(touch);
   const [voice, setVoice] = useState(true);
   const [wasPaused, setWasPaused] = useState(paused);
   if (paused !== wasPaused) {
@@ -1330,6 +1449,13 @@ function PauseMenu({ onRestart, onLeave, onHome }: { onRestart: () => void; onLe
           >
             Voice narration <span className="text-sun">{voice ? "On" : "Off"}</span>
           </button>
+          <button
+            onClick={() => setGraphicsQuality(quality === "high" ? "low" : "high")}
+            className={row}
+            aria-pressed={quality === "high"}
+          >
+            Graphics <span className="text-sun">{quality === "high" ? "Cinematic" : "Fast"}</span>
+          </button>
           {solo && (
             <div className="grid grid-cols-3 gap-2">
               {VIEWS.map((item) => (
@@ -1355,7 +1481,7 @@ function PauseMenu({ onRestart, onLeave, onHome }: { onRestart: () => void; onLe
                 </li>
               ))}
             </ol>
-            <p className="mt-3 text-[11px] text-paper/55">WASD move · Shift sprint · Space jump · E interact · V camera · Esc menu</p>
+            <p className="mt-3 text-[11px] text-paper/55">WASD move · Shift sprint · Space jump · E interact · V camera · Tab steps · Esc menu</p>
           </details>
         )}
         <div className="mt-5 grid gap-2.5 border-t border-paper/15 pt-5 sm:grid-cols-2">
@@ -1381,11 +1507,9 @@ export default function DrillShell({ title }: { title?: string }) {
   const view = useSimulation((state) => state.view);
   const setView = useSimulation((state) => state.setView);
   const setPaused = useSimulation((state) => state.setPaused);
-  const air = useSimulation((state) => state.air);
-  const health = useSimulation((state) => state.health);
-  const smoke = useSimulation((state) => state.smokeIntensity);
+  // Air, health and smoke change every hazard tick; they are read by the panels that show
+  // them, never here, or the whole shell - canvas included - would re-render ten times a second.
   const sector = useSimulation((state) => state.sector);
-  const routeStatus = useSimulation((state) => state.routeStatus);
   const reset = useSimulation((state) => state.reset);
   const leave = useSession((state) => state.leave);
   const onRouteMessage = useSession((state) => state.onRouteMessage);
@@ -1592,14 +1716,7 @@ export default function DrillShell({ title }: { title?: string }) {
         {evacueeHud ? (
           <Vitals />
         ) : (
-          <div className="hud-panel hidden flex-col gap-2 p-3 sm:flex">
-            <Bar label="Evacuee health" value={health} color="var(--mint)" danger={health < 35} />
-            <Bar label="Evacuee air" value={air} color="#6fb8ff" danger={air < 35} />
-            <div className="flex flex-wrap gap-3 font-mono text-[10px] uppercase tracking-wider text-paper/60">
-              <span style={{ color: routeStatus === "unsafe" ? "var(--danger)" : routeStatus === "intervened" ? "var(--mint)" : "var(--sun)" }}>route / {routeStatus}</span>
-              <span>smoke / {Math.round(smoke * 100)}%</span>
-            </div>
-          </div>
+          <WardenVitals />
         )}
       </div>
 
@@ -1612,6 +1729,8 @@ export default function DrillShell({ title }: { title?: string }) {
         </div>
       )}
 
+      {evacueeHud && <AirVignette />}
+      {evacueeHud && <RoomTitle />}
       {view === "evacuee" && !showStick && (
         <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
           <span className="block h-1.5 w-1.5 rounded-full bg-paper shadow-[0_0_0_2px_rgba(22,17,30,0.6)]" />

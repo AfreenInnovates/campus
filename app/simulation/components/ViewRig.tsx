@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ComponentRef } from "react";
-import { ContactShadows, Environment, Lightformer, OrbitControls, PerspectiveCamera } from "@react-three/drei";
+import { Environment, Lightformer, OrbitControls, PerspectiveCamera } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import { roomById, SUN_DIRECTION, type RoomDef } from "../level";
+import { roomById, roomHeight, SUN_DIRECTION, type RoomDef } from "../level";
 import { getSectorSmoke, VENTILATION_SMOKE_FACTOR } from "../smoke";
 import { clampDt, runtime } from "../runtime";
 import { useSimulation } from "../store";
 import { useCoarsePointer } from "../useCoarsePointer";
+import LightPool from "./LightPool";
 
 /** Corners of a room, at floor level and at head height. */
 function roomCorners(room: RoomDef) {
@@ -149,8 +150,9 @@ function SmokeAtmosphere() {
   const room = useSimulation((s) => s.sector);
   const fog = useRef<THREE.FogExp2>(null);
   const current = useRef(0);
-  const clear = useMemo(() => new THREE.Color("#6a5774"), []);
-  const smoke = useMemo(() => new THREE.Color("#9a939b"), []);
+  const clear = useMemo(() => new THREE.Color("#4a3a4c"), []);
+  // warm, dirty grey: smoke lit by fire, not mist
+  const smoke = useMemo(() => new THREE.Color("#6e625c"), []);
 
   useFrame((_, rawDt) => {
     const fogInstance = fog.current;
@@ -164,26 +166,44 @@ function SmokeAtmosphere() {
         : 0;
     const k = 1 - Math.exp(-clampDt(rawDt) * 4);
     current.current += (target - current.current) * k;
-    fogInstance.density = 0.012 + current.current * 0.1;
+    fogInstance.density = 0.01 + current.current * 0.12;
     fogInstance.color.copy(clear).lerp(smoke, current.current);
   });
 
-  return <fogExp2 ref={fog} attach="fog" args={["#6a5774", 0.012]} />;
+  return <fogExp2 ref={fog} attach="fog" args={["#4a3a4c", 0.01]} />;
 }
 
 const SUN = new THREE.Vector3(...SUN_DIRECTION).normalize();
 
-/** Low sunset key light, a violet sky fill and a restrained emergency pulse once smoke builds. */
-function SceneLighting() {
-  const smoke = useSimulation((state) => state.smokeIntensity);
+/**
+ * Low sunset key light, a cool sky fill, and the fire alarm: once smoke builds, the room the
+ * evacuee is in strobes red from the ceiling - sharp flashes rather than a gentle glow.
+ */
+function SceneLighting({ touch }: { touch: boolean }) {
   const intervention = useSimulation((state) => state.interventionApplied);
+  const sector = useSimulation((state) => state.sector);
   const alert = useRef<THREE.PointLight>(null);
 
+  useEffect(() => {
+    const light = alert.current;
+    if (!light) return;
+    const room = roomById(sector);
+    const b = room.bounds;
+    light.position.set((b.minX + b.maxX) / 2, roomHeight(sector) - 0.5, (b.minZ + b.maxZ) / 2);
+    light.distance = Math.max(14, Math.hypot(b.maxX - b.minX, b.maxZ - b.minZ) * 1.1);
+  }, [sector]);
+
   useFrame(({ clock }, rawDt) => {
-    if (!alert.current) return;
-    const pulse = (Math.sin(clock.elapsedTime * 5.5) + 1) * 0.5;
-    const target = smoke > 0.18 ? 0.15 + pulse * 0.45 * (intervention ? 0.35 : 1) : 0;
-    alert.current.intensity += (target - alert.current.intensity) * Math.min(1, clampDt(rawDt) * 5);
+    const dt = clampDt(rawDt);
+    // read, not subscribed: smoke changes every hazard tick
+    const on = useSimulation.getState().smokeIntensity > 0.18 && sector !== "outside";
+    if (alert.current) {
+      // two quick flashes a second, like a strobe beacon
+      const phase = (clock.elapsedTime * 1.4) % 1;
+      const flash = phase < 0.08 || (phase > 0.18 && phase < 0.26) ? 1 : 0;
+      const target = on ? flash * 14 * (intervention ? 0.35 : 1) : 0;
+      alert.current.intensity += (target - alert.current.intensity) * Math.min(1, dt * 30);
+    }
   });
 
   return (
@@ -193,7 +213,7 @@ function SceneLighting() {
         position={[SUN.x * 45, SUN.y * 45 + 8, SUN.z * 45]}
         intensity={2.1}
         color="#ffb27d"
-        shadow-mapSize={[2048, 2048]}
+        shadow-mapSize={[1024, 1024]}
         shadow-bias={-0.0004}
         shadow-normalBias={0.03}
         shadow-camera-near={1}
@@ -203,8 +223,10 @@ function SceneLighting() {
         shadow-camera-top={30}
         shadow-camera-bottom={-30}
       />
-      <directionalLight position={[-24, 14, 30]} intensity={0.45} color="#a78bff" />
-      <pointLight ref={alert} position={[0, 3.15, -1.5]} distance={18} decay={2} color="#ff4655" />
+      <directionalLight position={[-24, 14, 30]} intensity={0.35} color="#8f9dff" />
+      <pointLight ref={alert} position={[0, 3.15, -1.5]} distance={18} decay={1.6} intensity={0} color="#ff2a3a" />
+      {/* the room lamps: a few real lights that follow the evacuee, fewer still on a phone */}
+      <LightPool size={touch ? 3 : 5} />
     </>
   );
 }
@@ -339,19 +361,10 @@ export default function ViewRig() {
   return (
     <>
       <SmokeAtmosphere />
-      <SceneLighting />
-      <ContactShadows
-        position={[0, 0.015, 4]}
-        opacity={0.35}
-        scale={48}
-        blur={1.9}
-        far={5.5}
-        resolution={512}
-        color="#2a1d33"
-      />
+      <SceneLighting touch={touch} />
 
       {/* Soft image-based light: warm sunset on one side, violet sky above. Rendered once. */}
-      <Environment frames={1} resolution={128} environmentIntensity={0.65}>
+      <Environment frames={1} resolution={128} environmentIntensity={0.45}>
         <Lightformer
           form="rect"
           intensity={3}
@@ -377,8 +390,8 @@ export default function ViewRig() {
 
       <WardenRig active={!first} />
 
-      <ambientLight intensity={first ? 0.22 : 0.3} color="#ffe2cc" />
-      <hemisphereLight color="#cdb6ff" groundColor="#553a4a" intensity={first ? 0.5 : 0.55} />
+      <ambientLight intensity={first ? 0.1 : 0.25} color="#ffe2cc" />
+      <hemisphereLight color="#c4bddc" groundColor="#3a2a30" intensity={first ? 0.32 : 0.5} />
     </>
   );
 }

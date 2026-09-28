@@ -50,6 +50,7 @@ import {
   WallTrim,
   WoodCrate,
 } from "./Furniture";
+import NorthWing from "./NorthWing";
 
 const INK = "#231c2b";
 const CORAL = "#ff6a3d";
@@ -197,7 +198,6 @@ function Entrance() {
         />
         <CeilingLight position={[0, 3.72, 8.8]} />
       </EvacueeOnly>
-      <pointLight position={[0, 3, 8.8]} intensity={5} distance={9} decay={2} color="#fff1dc" />
     </group>
   );
 }
@@ -245,27 +245,6 @@ function Foyer() {
       />
 
       <OnWalls>
-        <WallTrim position={[0, 0, -6.72]} width={9.8} accent={CORAL} />
-        <SunsetWindow id="foyer-west" position={[-3.25, 0, -6.84]} width={2.5} height={2.1} />
-        <SunsetWindow id="foyer-east" position={[3.25, 0, -6.84]} width={2.5} height={2.1} />
-        <PaintedSign
-          id="foyer-feature"
-          position={[0, 2.05, -6.83]}
-          width={2.9}
-          height={1.6}
-          background={INK}
-          align="left"
-          valign="top"
-          padding={0.09}
-          lines={[
-            { text: "SCIENCE BLOCK / L1", size: 0.08, color: SUN, weight: 800, tracking: 0.01 },
-            { text: "Central", size: 0.2, color: "#fff6ea", weight: 900, gap: 0.04 },
-            { text: "Corridor", size: 0.2, color: "#fff6ea", weight: 900 },
-            { text: "West door: Chemistry Lab 1A", size: 0.075, color: MINT, weight: 700, gap: 0.08 },
-            { text: "East door: Classroom A201", size: 0.075, color: SUN, weight: 700, gap: 0.02 },
-            { text: "Exit: back through the south doors", size: 0.075, color: CORAL, weight: 700, gap: 0.02 },
-          ]}
-        />
         <BulletinBoard id="foyer-board" position={[5.33, 1.65, -3.2]} rotationY={-Math.PI / 2} />
         <FireAlarm position={[-5.33, 1.35, -0.4]} rotationY={Math.PI / 2} />
         <Poster
@@ -288,13 +267,46 @@ function Foyer() {
           ]}
         />
       </OnWalls>
+      {/* the north wall is cut away in the overhead views, so its signs belong to the evacuee */}
       <EvacueeOnly>
+        {/* the north wall opens onto the Main Hall; trim and signs sit either side of it */}
+        {[-1, 1].map((side) => (
+          <WallTrim key={side} position={[side * 3.55, 0, -6.72]} width={3.5} accent={CORAL} />
+        ))}
+        <PaintedSign
+          id="foyer-to-hall"
+          position={[0, 3.4, -6.83]}
+          width={3.2}
+          height={0.5}
+          background={INK}
+          border={SUN}
+          padding={0.1}
+          lines={[{ text: "MAIN HALL  /  LIBRARY  /  CAFETERIA", size: 0.26, color: "#fff6ea", weight: 900, tracking: 0.02 }]}
+        />
+        <PaintedSign
+          id="foyer-feature"
+          position={[3.6, 2.05, -6.83]}
+          width={2.9}
+          height={1.6}
+          background={INK}
+          align="left"
+          valign="top"
+          padding={0.09}
+          lines={[
+            { text: "SCIENCE BLOCK / L1", size: 0.08, color: SUN, weight: 800, tracking: 0.01 },
+            { text: "Central", size: 0.2, color: "#fff6ea", weight: 900, gap: 0.04 },
+            { text: "Corridor", size: 0.2, color: "#fff6ea", weight: 900 },
+            { text: "West door: Chemistry Lab 1A", size: 0.075, color: MINT, weight: 700, gap: 0.08 },
+            { text: "East door: Classroom A201", size: 0.075, color: SUN, weight: 700, gap: 0.02 },
+            { text: "North: Main Hall", size: 0.075, color: "#c9b8ff", weight: 700, gap: 0.02 },
+            { text: "Exit: back through the south doors", size: 0.075, color: CORAL, weight: 700, gap: 0.02 },
+          ]}
+        />
         <ExitSign position={[0, 3.25, 6.85]} rotationY={Math.PI} scale={0.9} />
         <CeilingLight position={[0, 3.72, 4.2]} />
         <CeilingLight position={[0, 3.72, -0.6]} />
         <CeilingLight position={[0, 3.72, -5.2]} />
       </EvacueeOnly>
-      <pointLight position={[0, 3.1, 0.5]} intensity={8} distance={14} decay={2} color="#fff1dc" />
     </group>
   );
 }
@@ -504,8 +516,6 @@ function ChemistryLab() {
           [-1.8, 2.4].map((z) => <PendantLight key={`${x}${z}`} position={[x, 3.2, z]} length={2.2} />),
         )}
       </EvacueeOnly>
-      <pointLight position={[-15, 2.9, -1.8]} intensity={9} distance={13} decay={2} color="#fff1dc" />
-      <pointLight position={[-15, 2.9, 3.6]} intensity={6} distance={11} decay={2} color="#ffe6c9" />
       <Glow position={[-11.25, 1.45, -5.2]} color="#d8f6ff" size={1.8} opacity={0.2} />
     </group>
   );
@@ -624,8 +634,6 @@ function Classroom() {
         <Projector position={[15, 3.25, 1.2]} />
         {[12, 18].flatMap((x) => [-3, 1.5].map((z) => <CeilingLight key={`${x}${z}`} position={[x, 3.72, z]} />))}
       </EvacueeOnly>
-      <pointLight position={[13, 3, -1]} intensity={6} distance={12} decay={2} color="#fff1dc" />
-      <pointLight position={[17.5, 3, -1]} intensity={6} distance={12} decay={2} color="#fff1dc" />
     </group>
   );
 }
@@ -637,6 +645,7 @@ export default function Rooms() {
       <Foyer />
       <ChemistryLab />
       <Classroom />
+      <NorthWing />
     </>
   );
 }

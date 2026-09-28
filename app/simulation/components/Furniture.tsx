@@ -5,7 +5,7 @@ import { useFrame } from "@react-three/fiber";
 import { RigidBody } from "@react-three/rapier";
 import * as THREE from "three";
 import type { Vec3 } from "../level";
-import { Glow } from "./Decor";
+import { Glow, hdr } from "./Decor";
 
 type P = { position: Vec3; rotationY?: number };
 
@@ -305,7 +305,7 @@ export function CeilingLight({
       </mesh>
       <mesh position={[0, -0.055, 0]} rotation={[Math.PI / 2, 0, 0]}>
         <planeGeometry args={[1.76, 0.4]} />
-        <meshBasicMaterial color={color} toneMapped={false} />
+        <meshBasicMaterial color={hdr(color)} toneMapped={false} />
       </mesh>
       <Glow position={[0, -0.3, 0]} color={color} size={2.4} opacity={0.26} />
       {light && <pointLight position={[0, -0.45, 0]} intensity={intensity} distance={13} decay={2} color={color} />}

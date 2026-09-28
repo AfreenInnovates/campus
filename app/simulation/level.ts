@@ -9,7 +9,10 @@ export type RoomId =
   | "ecorr"
   | "sec"
   | "vault"
-  | "annex";
+  | "annex"
+  | "atrium"
+  | "library"
+  | "cafe";
 
 export type EquipmentId = "access-card" | "emergency-guide";
 export type ScenarioObjectId =
@@ -53,7 +56,11 @@ export interface RoomDef {
   fog: boolean;
   floor: string;
   cam: { pos: Vec3; target: Vec3 };
+  /** Ceiling height; the Main Hall is double height. Defaults to ROOM_H. */
+  height?: number;
 }
+
+export const ATRIUM_H = 7.6;
 
 /**
  * The renderer retains the compact block foundation while the labels and
@@ -132,9 +139,50 @@ export const ROOMS: RoomDef[] = [
     floor: "#5d5a55",
     cam: { pos: [15, 9, 14], target: [15, 1.4, -7] },
   },
+  {
+    id: "atrium",
+    name: "Main Hall",
+    blurb: "Double-height hall north of the corridor. Smoke banks under its high ceiling.",
+    bounds: { minX: -8, maxX: 8, minZ: -25, maxZ: -7 },
+    fog: true,
+    floor: "#5b5560",
+    cam: { pos: [0, 24, -2], target: [0, 0.6, -16] },
+    height: ATRIUM_H,
+  },
+  {
+    id: "library",
+    name: "Library",
+    blurb: "Long stacks and reading tables off the west side of the Main Hall.",
+    bounds: { minX: -22, maxX: -8, minZ: -25, maxZ: -7 },
+    fog: true,
+    floor: "#5a4b44",
+    cam: { pos: [-4, 22, -8], target: [-15, 0.6, -16] },
+  },
+  {
+    id: "cafe",
+    name: "Cafeteria",
+    blurb: "Open dining hall off the east side of the Main Hall.",
+    bounds: { minX: 8, maxX: 22, minZ: -25, maxZ: -10 },
+    fog: true,
+    floor: "#565a5c",
+    cam: { pos: [4, 22, -8], target: [15, 0.6, -17.5] },
+  },
 ];
 
-export const roomById = (id: RoomId) => ROOMS.find((room) => room.id === id)!;
+export const roomHeight = (id: RoomId) => roomById(id).height ?? ROOM_H;
+
+export function roomById(id: RoomId) {
+  return ROOMS.find((room) => room.id === id)!;
+}
+
+/** The Main Hall's upper walkway along its north wall, reached by the central stair. */
+export const MEZZANINE = { minX: -8, maxX: 8, minZ: -25, maxZ: -21.5, y: 3.9 };
+
+/** How high a camera may rise at this spot: the room's ceiling, or the mezzanine above. */
+export function ceilingAt(sector: RoomId, z: number, feetY: number) {
+  if (sector === "atrium" && z < MEZZANINE.maxZ + 0.4 && feetY < MEZZANINE.y - 0.4) return MEZZANINE.y - 0.1;
+  return roomHeight(sector);
+}
 
 export function roomAt(x: number, z: number): RoomId {
   for (const room of ROOMS) {
@@ -175,17 +223,63 @@ const OUT = "#c9bac8";
 const IN = "#e7dde4";
 
 export const WALLS: WallDef[] = [
+  /* the old north face is now interior: lab | library, corridor | hall, classroom | service */
+  { id: "w-north-w", axis: "x", fixed: -7, from: -22.15, to: -8, color: IN },
   {
-    id: "w-north",
+    id: "w-north-c",
     axis: "x",
     fixed: -7,
-    from: -22.15,
+    from: -8,
+    to: 8,
+    height: ATRIUM_H,
+    color: IN,
+    openings: [{ at: 0, width: 3.4, height: 3 }],
+    // the overhead cameras look north into the hall over this wall, so drop it there
+    cutaway: true,
+  },
+  {
+    id: "w-north-e",
+    axis: "x",
+    fixed: -7,
+    from: 8,
     to: 22.15,
     color: OUT,
     openings: [{ at: 15, width: 3.6, height: 2.9 }],
   },
-  { id: "w-west", axis: "z", fixed: -22, from: -7.15, to: 7.15, color: OUT },
-  { id: "w-east", axis: "z", fixed: 22, from: -7.15, to: 7.15, color: OUT },
+  { id: "w-west", axis: "z", fixed: -22, from: -25.15, to: 7.15, color: OUT },
+  { id: "w-east", axis: "z", fixed: 22, from: -25.15, to: 7.15, color: OUT },
+  { id: "w-far-north-w", axis: "x", fixed: -25, from: -22.15, to: -8, color: OUT },
+  { id: "w-far-north-e", axis: "x", fixed: -25, from: 8, to: 22.15, color: OUT },
+  {
+    id: "w-hall-n",
+    axis: "x",
+    fixed: -25,
+    from: -8,
+    to: 8,
+    height: ATRIUM_H,
+    color: OUT,
+  },
+  {
+    id: "w-hall-w",
+    axis: "z",
+    fixed: -8,
+    from: -25,
+    to: -7,
+    height: ATRIUM_H,
+    color: IN,
+    openings: [{ at: -16, width: 2.6, height: 2.7 }],
+  },
+  {
+    id: "w-hall-e",
+    axis: "z",
+    fixed: 8,
+    from: -25,
+    to: -7,
+    height: ATRIUM_H,
+    color: IN,
+    openings: [{ at: -17.5, width: 2.6, height: 2.7 }],
+  },
+  { id: "w-cafe-s", axis: "x", fixed: -10, from: 8, to: 22, color: IN, cutaway: true },
   {
     id: "w-south-w",
     axis: "x",
@@ -218,7 +312,6 @@ export const WALLS: WallDef[] = [
   },
   { id: "w-annex-w", axis: "z", fixed: 13, from: -10.15, to: -7, color: OUT },
   { id: "w-annex-e", axis: "z", fixed: 17, from: -10.15, to: -7, color: OUT },
-  { id: "w-annex-n", axis: "x", fixed: -10, from: 12.85, to: 17.15, color: OUT },
   {
     id: "w-sec-e",
     axis: "z",
@@ -262,6 +355,9 @@ export const MASSES: { x1: number; z1: number; x2: number; z2: number }[] = [
   { x1: -8, z1: 4, x2: -5.5, z2: 7.15 },
   { x1: 5.5, z1: -7.15, x2: 8, z2: 1 },
   { x1: 5.5, z1: 4, x2: 8, z2: 7.15 },
+  /* dead space either side of the service room, between the classroom and the cafeteria */
+  { x1: 8.15, z1: -10, x2: 12.85, z2: -7.15 },
+  { x1: 17.15, z1: -10, x2: 21.85, z2: -7.15 },
 ];
 
 export const SLABS: {
@@ -272,10 +368,14 @@ export const SLABS: {
   z2: number;
   color: string;
   ceiling?: boolean;
+  height?: number;
 }[] = [
   { id: "main", x1: -22.15, z1: -7.15, x2: 22.15, z2: 7.15, color: "#d2c8d8", ceiling: true },
   { id: "entry", x1: -3.15, z1: 7.15, x2: 3.15, z2: 10.65, color: "#cfc3d2", ceiling: true },
   { id: "annex", x1: 12.85, z1: -10.15, x2: 17.15, z2: -7, color: "#b5aab9", ceiling: true },
+  { id: "library", x1: -22.15, z1: -25.15, x2: -8, z2: -7.15, color: "#8a6a55", ceiling: true },
+  { id: "atrium", x1: -8, z1: -25.15, x2: 8, z2: -7.15, color: "#8c8590", ceiling: true, height: ATRIUM_H },
+  { id: "cafe", x1: 8, z1: -25.15, x2: 22.15, z2: -10.15, color: "#8f9496", ceiling: true },
 ];
 
 /* ------------------------------------------------------------------- doors */

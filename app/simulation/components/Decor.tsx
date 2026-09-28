@@ -44,6 +44,11 @@ export function Glow({
 }
 
 /** A long fluorescent fixture hanging on two wires. Only some fixtures carry a real light. */
+/** A light panel's face, pushed past white so the bloom pass picks it up. */
+export function hdr(color: string, boost = 2.6) {
+  return new THREE.Color(color).multiplyScalar(boost);
+}
+
 export function PendantLight({
   position,
   rotationY = 0,
@@ -67,7 +72,7 @@ export function PendantLight({
       </mesh>
       <mesh position={[0, -0.045, 0]} rotation={[Math.PI / 2, 0, 0]}>
         <planeGeometry args={[length * 0.94, 0.17]} />
-        <meshBasicMaterial color={color} toneMapped={false} />
+        <meshBasicMaterial color={hdr(color)} toneMapped={false} />
       </mesh>
       <Glow position={[0, -0.22, 0]} color={color} size={length * 1.25} opacity={0.3} />
       {light && <pointLight position={[0, -0.5, 0]} intensity={intensity} distance={12} decay={2} color={color} />}

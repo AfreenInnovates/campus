@@ -29,6 +29,10 @@ export const SMOKE_PROFILES: Record<RoomId, SmokeProfile> = {
   sec: { startSeconds: 0, riseSeconds: 70, peakIntensity: 1 },
   vault: { startSeconds: 42, riseSeconds: 55, peakIntensity: 0.42 },
   annex: { startSeconds: 0, riseSeconds: 42, peakIntensity: 0.5 },
+  // hot smoke rises: the tall hall fills slowly, but it does fill
+  atrium: { startSeconds: 30, riseSeconds: 80, peakIntensity: 0.4 },
+  library: { startSeconds: 22, riseSeconds: 64, peakIntensity: 0.6 },
+  cafe: { startSeconds: 36, riseSeconds: 70, peakIntensity: 0.45 },
 };
 
 /** The logical east route is represented physically by the east passage. */

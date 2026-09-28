@@ -7,20 +7,23 @@ import { useSimulation } from "../store";
 
 const MIN_X = -23.5;
 const MAX_X = 23.5;
-const MIN_Z = -11;
+const MIN_Z = -26.5;
 const MAX_Z = 19;
 const W = MAX_X - MIN_X;
 const H = MAX_Z - MIN_Z;
 const sx = (x: number) => x - MIN_X;
 const sy = (z: number) => z - MIN_Z;
 
-const PLAN: RoomId[] = ["sec", "wcorr", "lobby", "ecorr", "vault", "entry", "annex"];
+const PLAN: RoomId[] = ["library", "atrium", "cafe", "sec", "wcorr", "lobby", "ecorr", "vault", "entry", "annex"];
 const SHORT: Partial<Record<RoomId, string>> = {
   sec: "LAB 1A",
   lobby: "CORRIDOR",
   vault: "A201",
   entry: "ENTRANCE",
-  annex: "SERVICE",
+  annex: "SVC",
+  atrium: "HALL",
+  library: "LIBRARY",
+  cafe: "CAFE",
 };
 const EXIT = scenarioObjectById("main-exit").position;
 
@@ -60,7 +63,7 @@ export default function Minimap() {
       </div>
       <svg
         viewBox={`0 0 ${W} ${H}`}
-        className="block h-[88px] w-[138px] overflow-visible sm:h-[128px] sm:w-[200px]"
+        className="block h-[92px] w-[94px] overflow-visible sm:h-[150px] sm:w-[154px]"
         role="img"
         aria-label="Floorplan with your position, the next objective and the exit"
       >
@@ -87,7 +90,7 @@ export default function Minimap() {
                   textAnchor="middle"
                   dominantBaseline="middle"
                   fill={current ? "#ffe3a3" : "rgba(248,242,234,0.55)"}
-                  fontSize={id === "annex" || id === "entry" ? 1.05 : 1.45}
+                  fontSize={id === "annex" || id === "entry" ? 1.3 : 1.9}
                   fontFamily="var(--font-geist-mono), monospace"
                   fontWeight="700"
                 >

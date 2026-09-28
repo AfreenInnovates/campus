@@ -10,6 +10,7 @@ import {
   ROOMS,
   ROOM_H,
   SLABS,
+  roomHeight,
   WALLS,
   WALL_T,
   type DoorDef,
@@ -72,7 +73,7 @@ function Shell() {
             </mesh>
             {s.ceiling && (
               <mesh
-                position={[cx, ROOM_H + WALL_T / 2, cz]}
+                position={[cx, (s.height ?? ROOM_H) + WALL_T / 2, cz]}
                  visible={evacueeView}
               >
                 <boxGeometry args={[w, WALL_T, d]} />
@@ -296,11 +297,12 @@ function RoomFog({ room }: { room: RoomDef }) {
   const cz = (b.minZ + b.maxZ) / 2;
   const w = b.maxX - b.minX - 0.1;
   const d = b.maxZ - b.minZ - 0.1;
+  const h = roomHeight(room.id);
 
   return (
     <group>
-      <mesh position={[cx, ROOM_H / 2 - 0.1, cz]}>
-        <boxGeometry args={[w, ROOM_H - 0.2, d]} />
+      <mesh position={[cx, h / 2 - 0.1, cz]}>
+        <boxGeometry args={[w, h - 0.2, d]} />
         <meshBasicMaterial ref={mat} color="#1a212b" transparent opacity={0.94} />
       </mesh>
       <Label

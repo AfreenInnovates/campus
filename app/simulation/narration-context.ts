@@ -104,7 +104,7 @@ const DONE_LINE: Record<ScenarioObjectId, string> = {
 
 /* -- wire format --------------------------------------------------------- */
 
-const ROOMS: RoomId[] = ["outside", "entry", "lobby", "wcorr", "ecorr", "sec", "vault", "annex"];
+const ROOMS: RoomId[] = ["outside", "entry", "lobby", "wcorr", "ecorr", "sec", "vault", "annex", "atrium", "library", "cafe"];
 const ROUTE_STATUS = ["clear", "unsafe", "intervened"] as const;
 
 /**

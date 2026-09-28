@@ -415,6 +415,9 @@ function sectorLabel(sector: RoomId) {
     sec: "Chemistry Lab 1A",
     vault: "Classroom A201",
     annex: "the electrical service room",
+    atrium: "the Main Hall",
+    library: "the library",
+    cafe: "the cafeteria",
   }[sector];
 }
 

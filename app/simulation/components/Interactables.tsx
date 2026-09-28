@@ -78,7 +78,6 @@ function WestRouteSign() {
         <planeGeometry args={[1.1, 0.16]} />
         <meshBasicMaterial color="#10b981" />
       </mesh>
-      <Label position={[0, 0, 0.08]} color="#10b981" text="WEST STAIR -> FOYER" sub="green return route" />
       <MarkerOverlay def={def} size={[3, 0.7, 0.12]} />
     </group>
   );
@@ -246,7 +245,7 @@ function ThreatMarker({ threat }: { threat: (typeof SPECTATOR_THREATS)[number] }
           <meshBasicMaterial color={threat.color} transparent opacity={0.85} />
         </mesh>
       )}
-      <Label position={[0, 0.9, 0]} color={threat.color} text={threat.label} sub={threat.sub} />
+      <Label position={[0, 0.9, 0]} color={threat.color} text={threat.label} room={threat.room} />
     </group>
   );
 }

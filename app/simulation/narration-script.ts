@@ -46,6 +46,9 @@ export const ROOM_NARRATION: Partial<Record<RoomId, string>> = {
   ecorr: "Academic Block passage. Classroom A201 is straight ahead.",
   vault: "Classroom A201. The route guide is on the desk nearest the door.",
   annex: "Electrical service room. There is nothing you need in here. Head back out.",
+  atrium: "Main Hall. Smoke rises and collects under this high ceiling. Stay low. The library is west, the cafeteria is east.",
+  library: "Library. Nothing you need is in here. Smoke is building between the stacks, so head back to the Main Hall.",
+  cafe: "Cafeteria. Nothing you need is in here. Head back through the Main Hall to the corridor.",
 };
 
 /** Confirmation when a step is completed. */

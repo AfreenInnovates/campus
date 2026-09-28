@@ -4,23 +4,33 @@ import { useRef, useState } from "react";
 import { Html, Edges } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { isRevealed, type MarkerDef, type Vec3 } from "../level";
+import { isRevealed, type MarkerDef, type RoomId, type Vec3 } from "../level";
 import { useSimulation, useSectorVisible } from "../store";
 
-/** Screen-space neon chip, same language as the reference mock. */
+/**
+ * Screen-space neon chip, same language as the reference mock.
+ *
+ * Given a `room`, the chip only shows while the evacuee is in that room: the overhead
+ * views follow the evacuee, so a label anywhere else is clutter - and each one is a DOM
+ * node repositioned every frame.
+ */
 export function Label({
   position,
   color,
   text,
   sub,
   faint = false,
+  room,
 }: {
   position: Vec3;
   color: string;
   text: string;
   sub?: string;
   faint?: boolean;
+  room?: RoomId;
 }) {
+  const hidden = useSimulation((s) => room !== undefined && s.sector !== room);
+  if (hidden) return null;
   return (
     <Html
       position={position}
@@ -269,6 +279,7 @@ export function MarkerOverlay({
         color={def.color}
         text={def.label}
         sub={def.sub}
+        room={def.room}
       />
     </>
   );

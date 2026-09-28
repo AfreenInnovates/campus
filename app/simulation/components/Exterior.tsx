@@ -300,9 +300,9 @@ export default function Exterior() {
         </mesh>
         <CuboidCollider position={[0, -0.25, 6]} args={[110, 0.25, 110]} />
         <CuboidCollider position={[0, 3, 30]} args={[40, 4, 0.5]} />
-        <CuboidCollider position={[0, 3, -18]} args={[40, 4, 0.5]} />
-        <CuboidCollider position={[-32, 3, 6]} args={[0.5, 4, 40]} />
-        <CuboidCollider position={[32, 3, 6]} args={[0.5, 4, 40]} />
+        <CuboidCollider position={[0, 3, -32]} args={[40, 4, 0.5]} />
+        <CuboidCollider position={[-32, 3, 0]} args={[0.5, 4, 40]} />
+        <CuboidCollider position={[32, 3, 0]} args={[0.5, 4, 40]} />
       </RigidBody>
 
       {/* plaza paving and lawns */}
@@ -376,8 +376,8 @@ export default function Exterior() {
           <Tree position={[0, 0, 0]} scale={1 + (index % 3) * 0.15} tint={index % 2 ? "#5a8a57" : "#4c7a4e"} />
         </RigidBody>
       ))}
-      <LampPost position={[-8.5, 0, 14]} light />
-      <LampPost position={[8.5, 0, 14]} light />
+      <LampPost position={[-8.5, 0, 14]} />
+      <LampPost position={[8.5, 0, 14]} />
       <LampPost position={[-8.5, 0, 21.5]} />
       <LampPost position={[8.5, 0, 21.5]} />
       <BannerPole
